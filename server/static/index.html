@@ -161,6 +161,26 @@
             font-size: 0.9rem;
         }
 
+        /* Contest mode: the agent published only the band, not the exact
+           frequency. Muted text + a padlock so it reads as "withheld on
+           purpose", not "missing" or "offline". */
+        .band-masked {
+            color: var(--body-color-muted);
+            white-space: nowrap;
+        }
+        .lock-icon {
+            vertical-align: -0.15em;
+        }
+
+        .legend {
+            color: var(--body-color-muted);
+            font-size: 0.78rem;
+            margin-top: 0.75rem;
+        }
+        .legend .lock-icon {
+            margin-right: 0.15rem;
+        }
+
         .repo-footer {
             background-color: var(--sidebar-bg);
             border-top: 1px solid var(--border-color);
@@ -254,11 +274,28 @@ function fmtFreq(hz) {
   return (hz / 1e6).toFixed(4) + ' MHz';
 }
 
+// Feather-style padlock, sized to the surrounding text (1em), inherits
+// color via currentColor.
+const LOCK_SVG =
+  '<svg class="lock-icon" viewBox="0 0 24 24" width="1em" height="1em"' +
+  ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+  ' stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="4" y="11" width="16" height="10" rx="2"></rect>' +
+  '<path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>';
+
+const MASK_TITLE =
+  'Contest mode — the shack agent is publishing only the band; ' +
+  'the exact frequency never leaves the LAN.';
+
 // When the agent runs in contest mode it sends a band name ("40M") in
 // place of the exact frequency (freq_hz is null in that case). Show the
-// band string as-is; otherwise fall back to the formatted MHz frequency.
+// band behind a padlock so it's clearly a deliberate mask, not a missing
+// reading; otherwise show the formatted MHz frequency as normal.
 function fmtFreqCell(radio) {
-  if (radio.band) return radio.band;
+  if (radio.band) {
+    return `<span class="band-masked" title="${MASK_TITLE}">` +
+           `${LOCK_SVG}&nbsp;${radio.band}</span>`;
+  }
   return fmtFreq(radio.freq_hz);
 }
 
@@ -273,6 +310,8 @@ function render(data) {
     content.appendChild(div);
     return;
   }
+
+  let anyMasked = false;
 
   for (const station of data.stations) {
     const heading = document.createElement('div');
@@ -290,6 +329,7 @@ function render(data) {
     const tbody = table.querySelector('tbody');
 
     for (const radio of station.radios) {
+      if (radio.status === 'online' && radio.band) anyMasked = true;
       const tr = document.createElement('tr');
       tr.className = radio.status; // "online" | "offline"
       tr.innerHTML = `
@@ -302,6 +342,14 @@ function render(data) {
       tbody.appendChild(tr);
     }
     content.appendChild(table);
+  }
+
+  if (anyMasked) {
+    const legend = document.createElement('div');
+    legend.className = 'legend';
+    legend.innerHTML = LOCK_SVG +
+      ' Contest mode &mdash; exact frequency kept on the shack LAN';
+    content.appendChild(legend);
   }
 
   document.getElementById('updated').textContent =
