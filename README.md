@@ -86,10 +86,18 @@ section below), using `config.example.dxlog.json`:
 stationagent-windows-amd64.exe --source dxlog config.json
 ```
 
-Pre-built binaries live in `agent/build/` (not committed — rebuild them
-with the commands below, or publish them via a Release). All the Linux
+Pre-built binaries live in `agent/build/` (not committed). All the Linux
 builds are fully static (no shared library dependencies, no libc version
 to match).
+
+**Where to get them:** the `agent-build` GitHub Actions workflow
+(`.github/workflows/agent-build.yml`) builds all four targets — Windows
+x86-64, Linux x86-64, Linux ARM64, Linux ARMv7 — on every branch push,
+after `go vet` / `go test` pass. Each run attaches the binaries as
+downloadable artifacts. Every merge to `main` additionally refreshes the
+rolling **`agent-latest`** pre-release with the four binaries attached, so
+"grab the current main build" is a one-click download from the Releases
+page. Or build them yourself with the commands below.
 
 **ARM Linux / Chromebook:** the agent is pure Go with no cgo, so it
 cross-compiles to ARM with nothing more than a different `GOARCH`. On a
