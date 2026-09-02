@@ -19,6 +19,7 @@
             --body-color-muted: #cc7a00;
             --border-color: #261a00;
             --highlight-bg: #211500;
+            --status-online: #1a7f37;
         }
 
         * {
@@ -144,7 +145,7 @@
             border-radius: 2px;
             background: var(--highlight-bg);
         }
-        .status-pill.online { color: var(--accent-color); }
+        .status-pill.online { color: var(--status-online); }
         .status-pill.offline { color: var(--body-color-muted); border-color: var(--border-color); }
 
         .updated {
@@ -156,6 +157,23 @@
         .empty-state {
             color: var(--body-color-muted);
             font-size: 0.9rem;
+        }
+
+        .repo-footer {
+            background-color: var(--sidebar-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 0.9rem 1.5rem;
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--body-color-muted);
+        }
+        .repo-footer a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        .repo-footer a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -177,6 +195,10 @@
                 <div class="updated" id="updated"></div>
             </div>
         </div>
+
+        <footer class="repo-footer">
+            <a href="https://github.com/chibondking/station-status" target="_blank" rel="noopener">github.com/chibondking/station-status</a>
+        </footer>
     </div>
 
 <script>
