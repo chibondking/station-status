@@ -1,0 +1,106 @@
+name: agent-build
+
+# Builds the Go station agent for every target we ship — Windows x86-64,
+# Linux x86-64, Linux ARM64, Linux ARMv7 (32-bit) — on every branch push
+# and every merge to main. Merges to main also refresh a rolling
+# "agent-latest" pre-release with the four binaries attached.
+#
+# Everything cross-compiles from a single ubuntu-latest runner: the agent
+# is pure Go with no cgo (CGO_ENABLED=0), so GOOS/GOARCH is all that
+# changes between targets. Same commands as README's "rebuild from source".
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+# One in-flight run per branch; a newer push cancels the older run.
+concurrency:
+  group: agent-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: agent
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, name: stationagent-windows-amd64.exe }
+          - { goos: linux,   goarch: amd64, name: stationagent-linux-amd64 }
+          - { goos: linux,   goarch: arm64, name: stationagent-linux-arm64 }
+          - { goos: linux,   goarch: arm, goarm: '7', name: stationagent-linux-armv7 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Build ${{ matrix.name }}
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          mkdir -p build
+          go build -trimpath -o "build/${{ matrix.name }}" .
+          ls -la "build/${{ matrix.name }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: agent/build/${{ matrix.name }}
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    # Only when a commit lands on main (i.e. a PR merge).
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roll the agent-latest tag to this commit
+        # softprops/action-gh-release won't move an existing published
+        # tag, so a rolling "latest" needs the tag repointed by hand
+        # first. Then the release step just refreshes body + assets.
+        run: |
+          git tag -f agent-latest
+          git push -f origin agent-latest
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Refresh rolling "agent-latest" pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: agent-latest
+          name: Agent binaries (latest main)
+          body: >
+            Auto-built from ${{ github.sha }} on
+            ${{ github.event.head_commit.timestamp }}.
+            Windows x86-64, Linux x86-64, Linux ARM64, Linux ARMv7.
+          prerelease: true
+          files: dist/*
+          fail_on_unmatched_files: true
