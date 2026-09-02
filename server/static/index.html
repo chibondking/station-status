@@ -157,6 +157,23 @@
             color: var(--body-color-muted);
             font-size: 0.9rem;
         }
+
+        .repo-footer {
+            background-color: var(--sidebar-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 0.9rem 1.5rem;
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--body-color-muted);
+        }
+        .repo-footer a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        .repo-footer a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -177,6 +194,10 @@
                 <div class="updated" id="updated"></div>
             </div>
         </div>
+
+        <footer class="repo-footer">
+            <a href="https://github.com/chibondking/station-status" target="_blank" rel="noopener">github.com/chibondking/station-status</a>
+        </footer>
     </div>
 
 <script>
