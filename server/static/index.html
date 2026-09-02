@@ -352,8 +352,9 @@ function render(data) {
     content.appendChild(legend);
   }
 
+  // UTC ("Zulu"), the standard on-air time reference -- HH:MM:SSZ.
   document.getElementById('updated').textContent =
-    'Last refreshed: ' + new Date().toLocaleTimeString();
+    'Last refreshed: ' + new Date().toISOString().slice(11, 19) + 'Z';
 }
 
 async function poll() {
