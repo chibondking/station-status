@@ -30,8 +30,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
@@ -50,8 +50,8 @@ jobs:
           - { goos: linux,   goarch: arm64, name: stationagent-linux-arm64 }
           - { goos: linux,   goarch: arm, goarm: '7', name: stationagent-linux-armv7 }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
@@ -65,7 +65,7 @@ jobs:
           mkdir -p build
           go build -trimpath -o "build/${{ matrix.name }}" .
           ls -la "build/${{ matrix.name }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
           path: agent/build/${{ matrix.name }}
@@ -80,7 +80,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Roll the agent-latest tag to this commit
         # softprops/action-gh-release won't move an existing published
         # tag, so a rolling "latest" needs the tag repointed by hand
@@ -88,12 +88,12 @@ jobs:
         run: |
           git tag -f agent-latest
           git push -f origin agent-latest
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
       - name: Refresh rolling "agent-latest" pre-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: agent-latest
           name: Agent binaries (latest main)
