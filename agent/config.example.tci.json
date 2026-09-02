@@ -1,0 +1,24 @@
+{
+  "source": "tci",
+  "station_id": "station1",
+  "station_name": "My Station",
+  "server_url": "http://your-vps-ip-or-domain:8000",
+  "api_token": "changeme",
+  "report_interval_seconds": 5,
+  "radios": [
+    {
+      "id": "panadapter0",
+      "label": "Panadapter 0 (RX A)",
+      "tci_host": "127.0.0.1",
+      "tci_port": 40001,
+      "tci_receiver": 0
+    },
+    {
+      "id": "panadapter1",
+      "label": "Panadapter 1 (RX B)",
+      "tci_host": "127.0.0.1",
+      "tci_port": 40001,
+      "tci_receiver": 1
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WT2P // Station Status</title>
+    <!-- Fira Code Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --body-bg: #0d0d0d;
+            --window-bg: #121212;
+            --sidebar-bg: #090909;
+            --accent-color: #ff9400;
+            --accent-hover: #ffaa33;
+            --accent-glow: rgba(255, 148, 0, 0.2);
+            --accent-dim: #804a00;
+            --body-color: #ffaa00;
+            --body-color-muted: #cc7a00;
+            --border-color: #261a00;
+            --highlight-bg: #211500;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--body-bg);
+            color: var(--body-color);
+            font-family: "Fira Code", monospace;
+            line-height: 1.6;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--window-bg);
+            border: 1px solid var(--accent-dim);
+            box-shadow: 0 0 20px var(--accent-glow);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        header {
+            background-color: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .callsign-title {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+        }
+
+        .callsign {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            text-shadow: 0 0 8px var(--accent-glow);
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--body-color-muted);
+        }
+
+        .status {
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            border: 1px solid var(--accent-dim);
+            padding: 0.25rem 0.5rem;
+            border-radius: 2px;
+            background: var(--highlight-bg);
+        }
+
+        .content {
+            padding: 2rem 1.5rem;
+        }
+
+        .section {
+            margin-bottom: 2rem;
+        }
+        .section:last-child { margin-bottom: 0; }
+
+        h2 {
+            font-size: 1.1rem;
+            color: var(--accent-color);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 0.25rem;
+        }
+
+        .station-name {
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin: 1rem 0 0.5rem;
+        }
+        .station-name:first-of-type { margin-top: 0; }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.85rem;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+        th {
+            background-color: var(--sidebar-bg);
+            color: var(--accent-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        td { color: var(--body-color); }
+        tr.offline td { color: var(--body-color-muted); font-style: italic; }
+
+        .status-pill {
+            font-size: 0.75rem;
+            border: 1px solid var(--accent-dim);
+            padding: 0.15rem 0.5rem;
+            border-radius: 2px;
+            background: var(--highlight-bg);
+        }
+        .status-pill.online { color: var(--accent-color); }
+        .status-pill.offline { color: var(--body-color-muted); border-color: var(--border-color); }
+
+        .updated {
+            color: var(--body-color-muted);
+            font-size: 0.78rem;
+            margin-top: 1rem;
+        }
+
+        .empty-state {
+            color: var(--body-color-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="callsign-title">
+                <span class="callsign">WT2P</span>
+                <span class="subtitle">// AMATEUR RADIO &amp; ENGINEERING</span>
+            </div>
+            <div class="status">Yorkville, IL | Elyria, OH (Remote)</div>
+        </header>
+
+        <div class="content">
+            <div class="section">
+                <h2>Station Status</h2>
+                <div id="content">Loading&hellip;</div>
+                <div class="updated" id="updated"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const POLL_MS = 3000;
+
+function fmtFreq(hz) {
+  if (hz === null || hz === undefined) return '\u2014';
+  return (hz / 1e6).toFixed(4) + ' MHz';
+}
+
+function render(data) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  if (!data.stations || data.stations.length === 0) {
+    const div = document.createElement('div');
+    div.className = 'empty-state';
+    div.textContent = 'No stations reporting yet.';
+    content.appendChild(div);
+    return;
+  }
+
+  for (const station of data.stations) {
+    const heading = document.createElement('div');
+    heading.className = 'station-name';
+    heading.textContent = station.station_name;
+    content.appendChild(heading);
+
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead>
+        <tr><th>Radio</th><th>Freq</th><th>Mode</th><th>Operator</th><th>Status</th></tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    const tbody = table.querySelector('tbody');
+
+    for (const radio of station.radios) {
+      const tr = document.createElement('tr');
+      tr.className = radio.status; // "online" | "offline"
+      tr.innerHTML = `
+        <td>${radio.label}</td>
+        <td>${radio.status === 'online' ? fmtFreq(radio.freq_hz) : '\u2014'}</td>
+        <td>${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
+        <td>${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>
+        <td><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    content.appendChild(table);
+  }
+
+  document.getElementById('updated').textContent =
+    'Last refreshed: ' + new Date().toLocaleTimeString();
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    document.getElementById('content').textContent = 'Error loading status: ' + e;
+  }
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>

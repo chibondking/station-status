@@ -1,0 +1,26 @@
+[Unit]
+Description=WT2P Station Status Server
+After=network.target
+
+[Service]
+Type=simple
+# Adjust User/Group and paths for your actual deployment layout.
+# Recommended: a dedicated non-root user rather than root.
+User=stationstatus
+Group=stationstatus
+WorkingDirectory=/opt/station-status/server
+EnvironmentFile=/opt/station-status/server/status.env
+ExecStart=/opt/station-status/server/venv/bin/python3 server.py
+
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening -- safe defaults for a small service that only needs to
+# read/serve its own directory and listen on a local port.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/station-status/server
+
+[Install]
+WantedBy=multi-user.target

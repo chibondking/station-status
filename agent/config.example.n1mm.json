@@ -1,0 +1,14 @@
+{
+  "source": "n1mm",
+  "station_id": "station1",
+  "station_name": "My Station",
+  "server_url": "http://your-vps-ip-or-domain:8000",
+  "api_token": "changeme",
+  "report_interval_seconds": 5,
+  "n1mm_port": 12060,
+  "default_operator": "WT2P",
+  "radios": [
+    { "id": "radio1", "label": "Radio 1", "radio_nr": 1 },
+    { "id": "radio2", "label": "Radio 2", "radio_nr": 2 }
+  ]
+}

@@ -1,0 +1,22 @@
+# Secrets - config.json contains your api_token, don't commit it
+agent/config.json
+server/config.json
+deploy/status.env
+server/status.env
+
+# Compiled binaries - rebuild from source instead of tracking these,
+# or use GitHub Releases/Actions to publish them separately
+agent/build/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Go
+agent/*.exe
+agent/*.test
+
+# OS cruft
+.DS_Store
