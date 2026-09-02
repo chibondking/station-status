@@ -187,6 +187,14 @@ function fmtFreq(hz) {
   return (hz / 1e6).toFixed(4) + ' MHz';
 }
 
+// When the agent runs in contest mode it sends a band name ("40M") in
+// place of the exact frequency (freq_hz is null in that case). Show the
+// band string as-is; otherwise fall back to the formatted MHz frequency.
+function fmtFreqCell(radio) {
+  if (radio.band) return radio.band;
+  return fmtFreq(radio.freq_hz);
+}
+
 function render(data) {
   const content = document.getElementById('content');
   content.innerHTML = '';
@@ -219,7 +227,7 @@ function render(data) {
       tr.className = radio.status; // "online" | "offline"
       tr.innerHTML = `
         <td>${radio.label}</td>
-        <td>${radio.status === 'online' ? fmtFreq(radio.freq_hz) : '\u2014'}</td>
+        <td>${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
         <td>${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
         <td>${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>
         <td><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span></td>
