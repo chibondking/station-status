@@ -43,6 +43,10 @@ app = FastAPI()
 #       radio_id: {
 #           "label": str,
 #           "freq_hz": Optional[int],
+#           "band": Optional[str],   # set instead of freq_hz when the agent
+#                                    # is in contest_mode -- the exact freq
+#                                    # never leaves the shack LAN, only the
+#                                    # band name ("40M")
 #           "mode": Optional[str],
 #           "operator": Optional[str],
 #           "connected": bool,   # was the agent's data source (TCI/N1MM) connected
@@ -86,6 +90,7 @@ async def report(request: Request, authorization: Optional[str] = Header(None)):
             radios[rid] = {
                 "label": r.get("label", rid),
                 "freq_hz": r.get("freq_hz"),
+                "band": r.get("band"),
                 "mode": r.get("mode"),
                 "operator": r.get("operator"),
                 "connected": bool(r.get("connected", False)),
@@ -111,6 +116,7 @@ async def status():
                     "id": rid,
                     "label": r["label"],
                     "freq_hz": r["freq_hz"] if is_online else None,
+                    "band": r.get("band") if is_online else None,
                     "mode": r["mode"] if is_online else None,
                     "operator": r["operator"] if is_online else None,
                     "source": r["source"],

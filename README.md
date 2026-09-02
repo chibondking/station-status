@@ -216,6 +216,54 @@ actual compiled `dxlog`-mode binary, correctly reporting 14.0805 MHz,
 USB, operator falling back to `mycall` when `OpCall` was empty — and the
 log line correctly reads `[dxlog :13063]`, not `[n1mm :13063]`.
 
+## Contest mode — the exact frequency never leaves the shack LAN
+
+Set `"contest_mode": true` at the top level of the agent's config.json
+(sibling of `"source"` — it's a whole-agent-process setting, not
+per-radio, exactly like `"source"`). Default is `false`; omitting the key
+entirely is the same as `false`.
+
+**What it does:** the agent still reads the real operating frequency from
+TCI / N1MM / DXLog internally, but it converts it to a US amateur *band
+name* ("40M", "20M", …) and sends only that. The outbound report has
+`band` set and `freq_hz` explicitly `null`. The server stores and serves
+whatever it's given; the frontend shows the band string in the Freq
+column when present, and the normal `14.0740 MHz` formatting otherwise.
+
+**The privacy guarantee:** the exact VFO frequency is never transmitted
+off the shack LAN and never reaches the server, the `/api/status` JSON,
+or the browser. This is enforced agent-side, before the HTTPS push — not
+as a UI filter over data that's still sitting in the public API response.
+`mode` and `operator` are unaffected; contest mode only touches
+frequency/band. All three sources (`tci`, `n1mm`, `dxlog`) inherit the
+behavior automatically since they share the same report-building path.
+
+**Band edges** are hardcoded in `agent/band.go` and were checked against
+ARRL's published US allocations, not a remembered table:
+- ARRL Frequency Allocations chart
+  (https://www.arrl.org/frequency-allocations) and ARRL Band Plan
+  (https://www.arrl.org/band-plan), cross-checked against each other, for
+  160M through 23CM plus the 2200M / 630M LF/MF bands.
+- 60M is not a contiguous allocation. Per the FCC rules effective
+  2026-02-13 (ARRL: "New 60-Meter Frequencies Available as of February
+  13", https://www.arrl.org/news/new-60-meter-frequencies-available-as-of-february-13),
+  US amateurs have four 2.8 kHz channels centered on 5332 / 5348 / 5373 /
+  5405 kHz plus a contiguous 5351.5–5366.5 kHz segment. `band.go`
+  classifies the whole 5330.6–5406.4 kHz envelope (lowest channel edge to
+  highest channel edge) as "60M" — finer resolution than the band name
+  is exactly what contest mode is meant to withhold.
+- A frequency in no recognized band returns the sentinel `"OOB"` (out of
+  band), never an empty string or a panic.
+
+`band.go`'s header comment carries the full table and reasoning;
+`band_test.go` covers a real operating frequency in every band, inclusive
+band-edge cases, and out-of-band inputs (including 0 and negative).
+`contest_mode_test.go` proves the actual privacy property end to end
+through the real snapshot code path: with `contest_mode` on a report's
+`FreqHz` is `nil` and `Band` is populated; with it off (or unset),
+behavior is byte-for-byte unchanged (`Band` nil, `FreqHz` sent as
+normal).
+
 ## What's been tested (in a sandbox, not on your hardware)
 
 - Go unit tests (`go test ./...` in `agent/`), including:
@@ -234,6 +282,17 @@ log line correctly reads `[dxlog :13063]`, not `[n1mm :13063]`.
     flag overriding a file with no `"source"` field, no source configured
     anywhere failing loudly).
   - Malformed-input cases for both sources that must not panic.
+  - `band_test.go` — a real operating frequency in every band 2200M–23CM
+    maps to the right name, inclusive band edges classify correctly, and
+    out-of-band inputs (including 0 and a negative) return `"OOB"` without
+    panicking. Band table is also asserted to be ascending and
+    non-overlapping.
+  - `contest_mode_test.go` — the privacy property, through the real
+    snapshot code path for both TCI and N1MM/DXLog: with `contest_mode`
+    on, a report's `FreqHz` is `nil` and `Band` is set; with it off or
+    unset, `Band` is `nil` and `FreqHz` is sent unchanged. Also confirms
+    `mode`/`operator` are untouched by contest mode and that the config
+    field parses with no special validation (omitted ⇒ false).
 - Both binaries cross-compiled and confirmed by `file`: a real static
   ELF64 Linux binary and a real PE32+ Windows binary.
 - Full end-to-end run using the **actual compiled Linux binary**, twice:
@@ -250,6 +309,15 @@ log line correctly reads `[dxlog :13063]`, not `[n1mm :13063]`.
     binary → the real server → `/api/status` showing 14.0805 MHz, USB,
     operator correctly falling back to `mycall`. Log line confirmed to
     read `[dxlog :13063]`, not `[n1mm :13063]`, despite sharing the parser.
+  - Contest mode: a fake TCI source feeding 14.074 MHz → the **actual
+    compiled Windows binary** with `"contest_mode": true` → the real
+    Python server → `curl /api/status` showing `"band": "20M"` and
+    `"freq_hz": null`, with the literal string `14074000` appearing
+    nowhere in the response. The same binary with `"contest_mode": false`
+    against the same source reported `"freq_hz": 14074000`, `"band":
+    null` — unchanged from today. Confirmed the server's offline/staleness
+    logic (which only looks at report timestamps and `connected`) doesn't
+    choke on a null `freq_hz`.
 - Server flow on its own: valid report → Online; bad auth token → 401;
   reports stop arriving → Offline past the threshold; multiple stations
   independently; `connected: false` → immediate Offline.

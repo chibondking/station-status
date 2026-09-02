@@ -15,6 +15,10 @@ type radioReport struct {
 	ID        string  `json:"id"`
 	Label     string  `json:"label"`
 	FreqHz    *int64  `json:"freq_hz"`
+	// Band is only populated when contest_mode is enabled; it carries the
+	// band name ("20M") in place of FreqHz, which is set nil in that case.
+	// When contest_mode is off, Band stays nil and FreqHz is sent as normal.
+	Band      *string `json:"band"`
 	Mode      *string `json:"mode"`
 	Operator  *string `json:"operator"`
 	Connected bool    `json:"connected"`
@@ -29,6 +33,20 @@ type reportPayload struct {
 
 func tciSourceKey(host string, port int) string {
 	return fmt.Sprintf("%s:%d", host, port)
+}
+
+// maskFreq applies contest_mode masking to one radio's frequency. With
+// contest mode on and a real frequency in hand, it returns (nil, &band)
+// so the outbound report carries only the band name and the exact
+// frequency stays on the shack LAN. With contest mode off (or no
+// frequency to mask), it returns the frequency untouched and a nil band,
+// i.e. exactly today's behavior.
+func maskFreq(cfg *Config, freq *int64) (outFreq *int64, band *string) {
+	if !cfg.ContestMode || freq == nil {
+		return freq, nil
+	}
+	b := freqToBand(*freq)
+	return nil, &b
 }
 
 // buildSnapshot is a function value chosen once at startup based on
@@ -48,23 +66,34 @@ func buildTCISnapshot(cfg *Config) snapshotFunc {
 	}
 
 	return func() []radioReport {
-		var radios []radioReport
-		for _, r := range cfg.Radios {
-			key := tciSourceKey(r.TCIHost, r.TCIPort)
-			src := sources[key]
-			freq, mode := src.GetReceiver(r.TCIReceiver)
-			radios = append(radios, radioReport{
-				ID:        r.ID,
-				Label:     r.Label,
-				FreqHz:    freq,
-				Mode:      mode,
-				Operator:  nil, // not available from TCI
-				Connected: src.IsConnected(),
-				Source:    "tci",
-			})
-		}
-		return radios
+		return tciRadiosSnapshot(cfg, sources)
 	}
+}
+
+// tciRadiosSnapshot is the pure mapping from live TCI source state to a
+// []radioReport, split out from buildTCISnapshot so a test can drive it
+// with pre-populated sources (no live WebSocket). This is also where
+// contest_mode masking is applied, so the test that proves the privacy
+// property can exercise the real code path, not a reimplementation.
+func tciRadiosSnapshot(cfg *Config, sources map[string]*TCISource) []radioReport {
+	var radios []radioReport
+	for _, r := range cfg.Radios {
+		key := tciSourceKey(r.TCIHost, r.TCIPort)
+		src := sources[key]
+		freq, mode := src.GetReceiver(r.TCIReceiver)
+		outFreq, band := maskFreq(cfg, freq)
+		radios = append(radios, radioReport{
+			ID:        r.ID,
+			Label:     r.Label,
+			FreqHz:    outFreq,
+			Band:      band,
+			Mode:      mode,
+			Operator:  nil, // not available from TCI
+			Connected: src.IsConnected(),
+			Source:    "tci",
+		})
+	}
+	return radios
 }
 
 func buildN1MMSnapshot(cfg *Config) snapshotFunc {
@@ -83,21 +112,31 @@ func buildN1MMStyleSnapshot(cfg *Config, port int, sourceLabel string) snapshotF
 	go src.Run()
 
 	return func() []radioReport {
-		var radios []radioReport
-		for _, r := range cfg.Radios {
-			freq, mode, operator, connected := src.GetRadio(r.RadioNr)
-			radios = append(radios, radioReport{
-				ID:        r.ID,
-				Label:     r.Label,
-				FreqHz:    freq,
-				Mode:      mode,
-				Operator:  operator,
-				Connected: connected,
-				Source:    sourceLabel,
-			})
-		}
-		return radios
+		return n1mmRadiosSnapshot(cfg, src, sourceLabel)
 	}
+}
+
+// n1mmRadiosSnapshot is the pure mapping from live N1MM/DXLog source state
+// to a []radioReport, split out from buildN1MMStyleSnapshot so a test can
+// drive it with a source populated via apply() (no live UDP socket) --
+// same reasoning as tciRadiosSnapshot. contest_mode masking happens here.
+func n1mmRadiosSnapshot(cfg *Config, src *N1MMSource, sourceLabel string) []radioReport {
+	var radios []radioReport
+	for _, r := range cfg.Radios {
+		freq, mode, operator, connected := src.GetRadio(r.RadioNr)
+		outFreq, band := maskFreq(cfg, freq)
+		radios = append(radios, radioReport{
+			ID:        r.ID,
+			Label:     r.Label,
+			FreqHz:    outFreq,
+			Band:      band,
+			Mode:      mode,
+			Operator:  operator,
+			Connected: connected,
+			Source:    sourceLabel,
+		})
+	}
+	return radios
 }
 
 func main() {

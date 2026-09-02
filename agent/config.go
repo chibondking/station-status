@@ -32,6 +32,12 @@ type Config struct {
 	// Can also be set via the --source CLI flag, which overrides whatever
 	// is in the file.
 	Source                string        `json:"source"`
+	// ContestMode is a whole-agent-process privacy setting (like Source,
+	// not per-radio). When true, the agent computes a band name from the
+	// real operating frequency and sends only that to the server -- the
+	// exact frequency never leaves the shack LAN. Default false / omitted.
+	// See band.go for the band edges and their source.
+	ContestMode           bool          `json:"contest_mode"`
 	StationID             string        `json:"station_id"`
 	StationName           string        `json:"station_name"`
 	ServerURL             string        `json:"server_url"`

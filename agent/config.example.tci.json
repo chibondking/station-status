@@ -1,5 +1,6 @@
 {
   "source": "tci",
+  "contest_mode": false,
   "station_id": "station1",
   "station_name": "My Station",
   "server_url": "http://your-vps-ip-or-domain:8000",
