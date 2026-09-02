@@ -7,9 +7,10 @@ A near-real-time station status page (K1TTT-style) built from:
 - **`agent/`** — runs on each shack computer, **the one that connects
   outbound to your VPS** — nothing on the shack LAN is ever reached
   directly by the VPS. Written in Go and compiled to a single standalone
-  binary for both Windows and Linux — no Python, no runtime, just the
-  .exe or the Linux binary. Pre-built binaries are in `agent/build/`;
-  source is the `.go` files next to it if you ever need to rebuild.
+  binary — no Python, no runtime — for Windows and for Linux on both
+  x86-64 and ARM (an ARM Chromebook's Linux/Crostini container included).
+  Build the binaries with the commands in Setup, or publish them via a
+  Release; source is the `.go` files if you ever need to rebuild.
   One agent process runs in exactly one mode, chosen via `"source"` in
   its config.json or the `--source` flag: `tci`, `n1mm`, or `dxlog`.
 - **`server/static/index.html`** — the actual page, polls `/api/status`
@@ -61,9 +62,9 @@ Env vars:
   (default 5s), so 15–20 is reasonable.
 - `STATUS_HOST` / `STATUS_PORT` — default `0.0.0.0:8000`.
 
-### Agent (on each shack computer, Windows or Linux)
+### Agent (on each shack computer, Windows or Linux — x86-64 or ARM)
 
-Nothing to install — copy the binary for your OS and a config file, then run it.
+Nothing to install — copy the binary for your OS/arch and a config file, then run it.
 
 **TCI mode** (AetherSDR panadapters), using `config.example.tci.json`:
 ```
@@ -85,16 +86,27 @@ section below), using `config.example.dxlog.json`:
 stationagent-windows-amd64.exe --source dxlog config.json
 ```
 
-Both binaries are in `agent/build/`. The Linux one is fully static (no
-shared library dependencies).
+Pre-built binaries live in `agent/build/` (not committed — rebuild them
+with the commands below, or publish them via a Release). All the Linux
+builds are fully static (no shared library dependencies, no libc version
+to match).
+
+**ARM Linux / Chromebook:** the agent is pure Go with no cgo, so it
+cross-compiles to ARM with nothing more than a different `GOARCH`. On a
+Chromebook this means running it inside the Linux (Crostini) container:
+`stationagent-linux-arm64` for a modern ARM Chromebook (MediaTek Kompanio
+/ Qualcomm 7c — the Crostini userland is 64-bit), `stationagent-linux-armv7`
+for an older 32-bit one. Run it exactly like the amd64 Linux binary.
 
 If you ever need to rebuild from source (e.g. after changing `agent/*.go`),
 you need the Go toolchain on *some* machine — not necessarily the shack
 computer:
 ```bash
 cd agent
-GOOS=windows GOARCH=amd64 go build -o build/stationagent-windows-amd64.exe .
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/stationagent-linux-amd64 .
+GOOS=windows GOARCH=amd64                 go build -o build/stationagent-windows-amd64.exe .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64     go build -o build/stationagent-linux-amd64 .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64     go build -o build/stationagent-linux-arm64 .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o build/stationagent-linux-armv7 .
 ```
 
 ## TCI format — confirmed against a real capture
@@ -293,8 +305,12 @@ normal).
     unset, `Band` is `nil` and `FreqHz` is sent unchanged. Also confirms
     `mode`/`operator` are untouched by contest mode and that the config
     field parses with no special validation (omitted ⇒ false).
-- Both binaries cross-compiled and confirmed by `file`: a real static
-  ELF64 Linux binary and a real PE32+ Windows binary.
+- All binaries cross-compiled and confirmed by `file`: a real PE32+
+  Windows binary, a static ELF64 x86-64 Linux binary, a static ELF64 ARM
+  aarch64 binary (`stationagent-linux-arm64`, for ARM Chromebooks via
+  Crostini), and a static ELF32 ARM EABI5 binary (`stationagent-linux-armv7`).
+  The ARM builds are cross-compile + `file`-verified only — not yet run on
+  actual ARM hardware.
 - Full end-to-end run using the **actual compiled Linux binary**, twice:
   - TCI mode: a fake TCI WebSocket server → the agent binary → the real
     Python server → `/api/status` correctly Online with right freq/mode.
@@ -326,4 +342,6 @@ normal).
 
 Not tested: an actual AetherSDR or N1MM instance, running the agent on a
 real Windows machine (only cross-compiled and confirmed as a valid
-Windows executable), or the frontend in a real (non-headless) browser.
+Windows executable), running the ARM builds on actual ARM hardware / a
+Chromebook (cross-compiled and `file`-verified only), or the frontend in
+a real (non-headless) browser.
