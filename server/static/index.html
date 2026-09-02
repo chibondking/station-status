@@ -42,6 +42,7 @@
 
         .container {
             width: 100%;
+            min-width: 0;
             max-width: 800px;
             background-color: var(--window-bg);
             border: 1px solid var(--accent-dim);
@@ -65,7 +66,8 @@
         .callsign-title {
             display: flex;
             align-items: baseline;
-            gap: 0.75rem;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.75rem;
         }
 
         .callsign {
@@ -170,10 +172,53 @@
         .repo-footer a {
             color: var(--accent-color);
             text-decoration: none;
+            overflow-wrap: anywhere;
         }
         .repo-footer a:hover {
             color: var(--accent-hover);
             text-decoration: underline;
+        }
+
+        /* --- Mobile: below ~560px the 5-column table won't fit, so each
+           radio row becomes a stacked label/value card. --- */
+        @media (max-width: 560px) {
+            body { padding: 1rem 0.5rem; }
+            header { padding: 1rem; }
+            .callsign { font-size: 1.6rem; }
+            .content { padding: 1.25rem 1rem; }
+            .repo-footer { padding: 0.9rem 1rem; }
+
+            /* Let the subtitle drop under the callsign instead of being
+               clipped on the same line. */
+            .subtitle { flex-basis: 100%; }
+
+            table, tbody, tr, td { display: block; }
+            thead { display: none; }
+            table { width: 100%; }
+
+            tr {
+                border: 1px solid var(--border-color);
+                margin-bottom: 0.75rem;
+            }
+            tr:last-child { margin-bottom: 0; }
+
+            td {
+                border: none;
+                border-bottom: 1px dashed var(--border-color);
+                padding: 0.5rem 0.75rem;
+                overflow-wrap: anywhere;
+            }
+            td:last-child { border-bottom: none; }
+            td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 0.1rem;
+                color: var(--accent-color);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-size: 0.7rem;
+                font-weight: 600;
+            }
         }
     </style>
 </head>
@@ -248,11 +293,11 @@ function render(data) {
       const tr = document.createElement('tr');
       tr.className = radio.status; // "online" | "offline"
       tr.innerHTML = `
-        <td>${radio.label}</td>
-        <td>${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
-        <td>${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
-        <td>${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>
-        <td><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span></td>
+        <td data-label="Radio">${radio.label}</td>
+        <td data-label="Freq">${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
+        <td data-label="Mode">${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
+        <td data-label="Operator">${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>
+        <td data-label="Status"><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span></td>
       `;
       tbody.appendChild(tr);
     }
