@@ -182,6 +182,9 @@
         }
 
         .repo-footer {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
             background-color: var(--sidebar-bg);
             border-top: 1px solid var(--border-color);
             padding: 0.9rem 1.5rem;
@@ -262,7 +265,9 @@
         </div>
 
         <footer class="repo-footer">
-            <a href="https://github.com/chibondking/station-status" target="_blank" rel="noopener">github.com/chibondking/station-status</a>
+            <span>Created by <a href="https://wt2p.us" target="_blank" rel="noopener">WT2P</a> &middot; <a href="https://github.com/chibondking/station-status" target="_blank" rel="noopener">GitHub</a></span>
+            <span>TCI radio data powered by <a href="https://github.com/aethersdr/AetherSDR" target="_blank" rel="noopener">AetherSDR</a></span>
+            <span id="deploy-info" hidden></span>
         </footer>
     </div>
 
@@ -369,6 +374,20 @@ async function poll() {
 
 poll();
 setInterval(poll, POLL_MS);
+
+// Deploy stamp in the footer -- lets a viewer tell whether they're looking
+// at a stale/cached page, since this only changes on an actual redeploy.
+// Fetched once; no need to poll it.
+fetch('/api/version', { cache: 'no-store' })
+  .then((r) => r.json())
+  .then((v) => {
+    if (!v || !v.deployedAt) return;
+    const el = document.getElementById('deploy-info');
+    const when = new Date(v.deployedAt).toLocaleString();
+    el.textContent = 'deployed ' + when + (v.commit ? ' (' + v.commit + ')' : '');
+    el.hidden = false;
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>
