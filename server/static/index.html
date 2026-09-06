@@ -150,6 +150,16 @@
         .status-pill.online { color: var(--status-online); }
         .status-pill.offline { color: var(--body-color-muted); border-color: var(--border-color); }
 
+        /* Where the reading comes from: "TCI" for a direct radio link,
+           "Logger" for an N1MM/DXLog feed off the shack LAN. */
+        .source-tag {
+            margin-left: 0.4rem;
+            font-size: 0.65rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--body-color-muted);
+        }
+
         .updated {
             color: var(--body-color-muted);
             font-size: 0.78rem;
@@ -304,6 +314,15 @@ function fmtFreqCell(radio) {
   return fmtFreq(radio.freq_hz);
 }
 
+// Small tag shown next to ONLINE/OFFLINE: "TCI" for a direct radio
+// connection, "Logger" for an N1MM/DXLog feed. Anything else (missing or
+// "unknown") gets no tag.
+function sourceLabel(source) {
+  if (source === 'tci') return 'TCI';
+  if (source === 'n1mm' || source === 'dxlog') return 'Logger';
+  return '';
+}
+
 function render(data) {
   const content = document.getElementById('content');
   content.innerHTML = '';
@@ -342,7 +361,7 @@ function render(data) {
         <td data-label="Freq">${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
         <td data-label="Mode">${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
         <td data-label="Operator">${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>
-        <td data-label="Status"><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span></td>
+        <td data-label="Status"><span class="status-pill ${radio.status}">${radio.status.toUpperCase()}</span>${sourceLabel(radio.source) ? `<span class="source-tag">${sourceLabel(radio.source)}</span>` : ''}</td>
       `;
       tbody.appendChild(tr);
     }
