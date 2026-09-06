@@ -14,7 +14,10 @@ Run:
 """
 
 import os
+import json
 import time
+import datetime
+import subprocess
 import threading
 from typing import Dict, Any, List, Optional
 
@@ -128,6 +131,57 @@ async def status():
                 "radios": radios_out,
             })
     return JSONResponse({"stations": out, "server_time": now})
+
+
+# ---- Deploy metadata (for the frontend footer's "deployed at" line) -------
+# Lets a viewer tell at a glance whether they're looking at a cached/stale
+# page: this only changes when the service is actually restarted/redeployed,
+# never on its own. deploy-info.json (git-ignored, optionally written at
+# deploy time) wins if present; otherwise we fall back to this process's own
+# start time, which for this project's "git pull + systemctl restart" deploy
+# flow *is* the moment of deploy.
+_PROCESS_STARTED_AT = datetime.datetime.now(datetime.timezone.utc).isoformat()
+_DEPLOY_INFO_PATH = os.path.join(os.path.dirname(__file__), "deploy-info.json")
+
+
+def _git_short_commit() -> Optional[str]:
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(__file__),
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return (out.stdout.strip() or None) if out.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _compute_version_info() -> Dict[str, Any]:
+    try:
+        with open(_DEPLOY_INFO_PATH) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    return {
+        "commit": data.get("commit") or _git_short_commit(),
+        "deployedAt": data.get("deployedAt") or _PROCESS_STARTED_AT,
+    }
+
+
+# Computed once: the commit and process start time don't change without a
+# restart, and a per-request git subprocess would stall uvicorn's single
+# event loop (blocking every client's /api/status poll while it runs).
+_VERSION_INFO = _compute_version_info()
+
+
+@app.get("/api/version")
+async def version():
+    """When this instance was last deployed, shown in the page footer."""
+    return _VERSION_INFO
 
 
 # Serve the frontend (index.html + assets) from ../server/static

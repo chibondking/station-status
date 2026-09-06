@@ -4,6 +4,10 @@ server/config.json
 deploy/status.env
 server/status.env
 
+# Deploy metadata written fresh at each deploy (see get_version_info in
+# server.py) -- environment-specific, never tracked.
+server/deploy-info.json
+
 # Compiled binaries - rebuild from source instead of tracking these,
 # or use GitHub Releases/Actions to publish them separately
 agent/build/
