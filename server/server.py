@@ -158,22 +158,30 @@ def _git_short_commit() -> Optional[str]:
         return None
 
 
-def get_version_info() -> Dict[str, Any]:
+def _compute_version_info() -> Dict[str, Any]:
     try:
         with open(_DEPLOY_INFO_PATH) as f:
             data = json.load(f)
-        return {
-            "commit": data.get("commit") or _git_short_commit(),
-            "deployedAt": data.get("deployedAt") or _PROCESS_STARTED_AT,
-        }
+        if not isinstance(data, dict):
+            data = {}
     except (OSError, ValueError):
-        return {"commit": _git_short_commit(), "deployedAt": _PROCESS_STARTED_AT}
+        data = {}
+    return {
+        "commit": data.get("commit") or _git_short_commit(),
+        "deployedAt": data.get("deployedAt") or _PROCESS_STARTED_AT,
+    }
+
+
+# Computed once: the commit and process start time don't change without a
+# restart, and a per-request git subprocess would stall uvicorn's single
+# event loop (blocking every client's /api/status poll while it runs).
+_VERSION_INFO = _compute_version_info()
 
 
 @app.get("/api/version")
 async def version():
     """When this instance was last deployed, shown in the page footer."""
-    return get_version_info()
+    return _VERSION_INFO
 
 
 # Serve the frontend (index.html + assets) from ../server/static

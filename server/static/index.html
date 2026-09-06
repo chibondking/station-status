@@ -382,8 +382,12 @@ fetch('/api/version', { cache: 'no-store' })
   .then((r) => r.json())
   .then((v) => {
     if (!v || !v.deployedAt) return;
+    const d = new Date(v.deployedAt);
+    if (isNaN(d.getTime())) return;
+    // UTC ("Zulu"), matching the "Last refreshed" line above -- one
+    // timezone across the whole page.
+    const when = d.toISOString().slice(0, 19).replace('T', ' ') + 'Z';
     const el = document.getElementById('deploy-info');
-    const when = new Date(v.deployedAt).toLocaleString();
     el.textContent = 'deployed ' + when + (v.commit ? ' (' + v.commit + ')' : '');
     el.hidden = false;
   })
