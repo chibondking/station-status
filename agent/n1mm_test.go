@@ -138,24 +138,21 @@ func TestN1MMRunReceivesRealPackets(t *testing.T) {
 	go src.Run()
 	defer src.Stop()
 
-	// Give Run() a moment to bind before sending.
-	var sender *net.UDPConn
-	for i := 0; i < 50; i++ {
-		sender, err = net.DialUDP("udp4", nil, &net.UDPAddr{Port: port, IP: net.IPv4(127, 0, 0, 1)})
-		if err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	// Deliberately unconnected: a connected UDP socket on Linux latches an
+	// ECONNREFUSED from an async ICMP port-unreachable (sent before Run()
+	// has bound) and replays it on the *next* Write, even once the
+	// listener is up -- an unconnected socket has no such state to get
+	// stuck in, so a plain retry loop is enough to ride out the startup
+	// race.
+	sender, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0, IP: net.IPv4zero})
 	if err != nil {
-		t.Fatalf("failed to dial the agent's UDP listener: %v", err)
+		t.Fatalf("failed to open a sender socket: %v", err)
 	}
 	defer sender.Close()
+	dest := &net.UDPAddr{Port: port, IP: net.IPv4(127, 0, 0, 1)}
 
 	for i := 0; i < 50; i++ {
-		if _, err := sender.Write([]byte(n1mmExamplePacket)); err != nil {
-			t.Fatalf("write failed: %v", err)
-		}
+		sender.WriteToUDP([]byte(n1mmExamplePacket), dest) // ignore errors -- retried below
 		_, _, _, connected := src.GetRadio(1)
 		if connected {
 			return
