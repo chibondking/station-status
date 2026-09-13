@@ -68,6 +68,28 @@ import (
 // couple of missed beats plus network jitter before giving up.
 const n1mmStaleAfter = 25 * time.Second
 
+// n1mmReadPollInterval bounds each ReadFromUDP call so the read loop wakes
+// up periodically even with no traffic, instead of blocking forever. This
+// is what lets us notice "the socket is still open but nothing has arrived
+// in ages" -- unlike a dropped TCP/WebSocket connection (see tci.go), a UDP
+// socket that's stopped receiving broadcasts (NIC sleep/wake, VPN toggle,
+// a Windows firewall profile change, N1MM itself restarting) doesn't error
+// out on its own. Without polling like this, Run() would just sit in one
+// ReadFromUDP call forever, and the only fix would be restarting the whole
+// client -- exactly the symptom this is hardening against.
+const n1mmReadPollInterval = 5 * time.Second
+
+// n1mmSocketMaxIdle is how long the read loop tolerates receiving nothing
+// at all before assuming the socket itself is wedged and rebinding it.
+// Well above n1mmStaleAfter (so a genuinely idle/disconnected radio doesn't
+// by itself trigger a rebind) but still well under the couple of minutes a
+// human would tolerate before noticing and restarting the client by hand.
+const n1mmSocketMaxIdle = 90 * time.Second
+
+// n1mmReconnectBackoff is how long to wait before retrying after a bind
+// failure or a rebind, mirroring the backoff TCISource.Run uses.
+const n1mmReconnectBackoff = 2 * time.Second
+
 type n1mmRadioInfo struct {
 	XMLName xml.Name `xml:"RadioInfo"`
 	RadioNr int      `xml:"RadioNr"`
@@ -93,9 +115,11 @@ type N1MMSource struct {
 	// under whichever name actually applies.
 	Label string
 
-	mu     sync.Mutex
-	radios map[int]*n1mmRadioState
-	conn   *net.UDPConn
+	mu      sync.Mutex
+	radios  map[int]*n1mmRadioState
+	conn    *net.UDPConn
+	stop    chan struct{}
+	stopped bool
 }
 
 func NewN1MMSource(port int, defaultOperator string, label string) *N1MMSource {
@@ -104,6 +128,7 @@ func NewN1MMSource(port int, defaultOperator string, label string) *N1MMSource {
 		DefaultOperator: defaultOperator,
 		Label:           label,
 		radios:          make(map[int]*n1mmRadioState),
+		stop:            make(chan struct{}),
 	}
 }
 
@@ -157,26 +182,77 @@ func (s *N1MMSource) apply(packet []byte) {
 	st.LastUpdate = time.Now()
 }
 
-// Run listens for UDP broadcasts until Stop() is called (closing the
-// socket, which unblocks ReadFromUDP with an error).
+// Run listens for UDP broadcasts, rebinding with backoff if the socket
+// fails or goes quiet for too long, until Stop() is called. Unlike TCISource
+// (a real connection that errors out promptly when it drops), a UDP
+// listening socket can just stop receiving broadcasts with no error at all
+// -- so this polls the read with a deadline and rebinds on prolonged
+// silence, rather than trusting ReadFromUDP to ever report a problem.
 func (s *N1MMSource) Run() {
+	for {
+		if s.isStopped() {
+			return
+		}
+
+		conn, err := s.listen()
+		if err != nil {
+			log.Printf("[%s :%d] failed to listen: %v (retrying in %v)", s.Label, s.Port, err, n1mmReconnectBackoff)
+			if s.waitOrStop(n1mmReconnectBackoff) {
+				return
+			}
+			continue
+		}
+
+		log.Printf("[%s :%d] listening for RadioInfo broadcasts", s.Label, s.Port)
+		s.readLoop(conn)
+		conn.Close()
+
+		if s.isStopped() {
+			return
+		}
+		log.Printf("[%s :%d] rebinding after connection loss", s.Label, s.Port)
+		if s.waitOrStop(n1mmReconnectBackoff) {
+			return
+		}
+	}
+}
+
+func (s *N1MMSource) listen() (*net.UDPConn, error) {
 	addr := &net.UDPAddr{Port: s.Port, IP: net.IPv4zero}
 	conn, err := net.ListenUDP("udp4", addr)
 	if err != nil {
-		log.Printf("[%s :%d] failed to listen: %v", s.Label, s.Port, err)
-		return
+		return nil, err
 	}
 	s.mu.Lock()
 	s.conn = conn
 	s.mu.Unlock()
+	return conn, nil
+}
 
-	log.Printf("[%s :%d] listening for RadioInfo broadcasts", s.Label, s.Port)
+// readLoop reads packets until the socket errors, goes silent for longer
+// than n1mmSocketMaxIdle, or Stop() is called. It returns (rather than
+// exiting the process) so Run() can rebind and keep going.
+func (s *N1MMSource) readLoop(conn *net.UDPConn) {
 	buf := make([]byte, 8192)
+	lastPacket := time.Now()
 	for {
+		conn.SetReadDeadline(time.Now().Add(n1mmReadPollInterval))
 		n, _, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			return // socket closed via Stop(), or a real error -- either way, exit
+			if s.isStopped() {
+				return
+			}
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				if time.Since(lastPacket) > n1mmSocketMaxIdle {
+					log.Printf("[%s :%d] no RadioInfo packets in over %v -- socket may be wedged", s.Label, s.Port, n1mmSocketMaxIdle)
+					return
+				}
+				continue // just polling; no packet yet, nothing wrong (yet)
+			}
+			log.Printf("[%s :%d] read error: %v", s.Label, s.Port, err)
+			return
 		}
+		lastPacket = time.Now()
 		// Copy before handing off -- buf is reused on the next read.
 		packet := make([]byte, n)
 		copy(packet, buf[:n])
@@ -184,9 +260,34 @@ func (s *N1MMSource) Run() {
 	}
 }
 
+func (s *N1MMSource) isStopped() bool {
+	select {
+	case <-s.stop:
+		return true
+	default:
+		return false
+	}
+}
+
+// waitOrStop waits out the backoff, returning early (true) if Stop() is
+// called while waiting.
+func (s *N1MMSource) waitOrStop(d time.Duration) bool {
+	select {
+	case <-time.After(d):
+		return false
+	case <-s.stop:
+		return true
+	}
+}
+
 func (s *N1MMSource) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopped {
+		return
+	}
+	s.stopped = true
+	close(s.stop)
 	if s.conn != nil {
 		s.conn.Close()
 	}

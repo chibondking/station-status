@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"testing"
 	"time"
 )
@@ -117,4 +118,57 @@ func TestN1MMStaleAfterTimeout(t *testing.T) {
 	if connected {
 		t.Fatal("radio not updated in over a minute should be stale/disconnected")
 	}
+}
+
+// TestN1MMRunReceivesRealPackets exercises Run() against an actual UDP
+// socket end-to-end (not just apply()), so the reconnect/rebind plumbing
+// in listen()/readLoop() is proven wired up correctly, not just the pure
+// packet parsing.
+func TestN1MMRunReceivesRealPackets(t *testing.T) {
+	// Port 0 lets the OS pick a free port, but Run() itself listens on
+	// s.Port -- so grab a free port up front, then hand it to Run().
+	probe, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0, IP: net.IPv4zero})
+	if err != nil {
+		t.Fatalf("failed to find a free port: %v", err)
+	}
+	port := probe.LocalAddr().(*net.UDPAddr).Port
+	probe.Close()
+
+	src := NewN1MMSource(port, "WT2P", "n1mm")
+	go src.Run()
+	defer src.Stop()
+
+	// Give Run() a moment to bind before sending.
+	var sender *net.UDPConn
+	for i := 0; i < 50; i++ {
+		sender, err = net.DialUDP("udp4", nil, &net.UDPAddr{Port: port, IP: net.IPv4(127, 0, 0, 1)})
+		if err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("failed to dial the agent's UDP listener: %v", err)
+	}
+	defer sender.Close()
+
+	for i := 0; i < 50; i++ {
+		if _, err := sender.Write([]byte(n1mmExamplePacket)); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+		_, _, _, connected := src.GetRadio(1)
+		if connected {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("Run() never picked up a packet sent over a real socket")
+}
+
+// TestN1MMStopIsIdempotent guards against a double-close panic -- Stop()
+// can plausibly be called more than once (e.g. shutdown paths racing).
+func TestN1MMStopIsIdempotent(t *testing.T) {
+	src := NewN1MMSource(0, "WT2P", "n1mm")
+	src.Stop()
+	src.Stop() // must not panic
 }
