@@ -22,6 +22,19 @@ UDP packets for the N1MM path. See "What's been tested" at the bottom for
 specifics on what's verified vs. what still needs checking on your
 hardware.
 
+## Screenshots
+
+The page, running against the real server and the real compiled agent
+binary — one station in N1MM mode, one in TCI (AetherSDR) mode:
+
+**N1MM mode** — a real UDP `<RadioInfo>` broadcast → the agent → the server:
+
+![N1MM mode](docs/screenshots/n1mm.png)
+
+**TCI mode** — AetherSDR's `vfo:`/`modulation:` WebSocket stream → the agent → the server:
+
+![TCI mode](docs/screenshots/tci.png)
+
 ## Why this design
 
 - **Expandable**: a "station" is just a JSON object with an id, a name,
