@@ -5,7 +5,7 @@ name: agent-build
 # and every merge to main. Merges to main also refresh a rolling
 # "agent-latest" pre-release with the four binaries attached.
 #
-# Everything cross-compiles from a single ubuntu-latest runner: the agent
+# Everything cross-compiles from the self-hosted vps-station-status-runner: the agent
 # is pure Go with no cgo (CGO_ENABLED=0), so GOOS/GOARCH is all that
 # changes between targets. Same commands as README's "rebuild from source".
 
@@ -28,7 +28,7 @@ defaults:
 
 jobs:
   test:
-    runs-on: self-hosted 
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -40,7 +40,7 @@ jobs:
 
   build:
     needs: test
-    runs-on: self-hosted 
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +76,7 @@ jobs:
     # Only when a commit lands on main (i.e. a PR merge).
     if: github.ref == 'refs/heads/main'
     needs: build
-    runs-on: self-hosted 
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:
