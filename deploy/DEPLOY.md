@@ -91,6 +91,15 @@ curl -s https://remote.wt2p.us/api/status
 Then open it in a browser. Once an agent (see the agent README section)
 starts reporting, the page should update within a few seconds.
 
+`GET /api/health` is the route an external monitor (the ops dashboard)
+should poll instead -- `{ status: "ok", stations_reporting, radios_total,
+radios_online, offline_threshold_seconds }`. `status` here is close to
+"did this request complete at all" (this process has no DB, no socket to
+bind, just an in-memory dict), so the genuinely useful signal for a
+monitor is the online/offline counts -- every station going quiet is an
+agent-side failure, not something a bare "is the process up" check would
+ever catch.
+
 ## Note on firewalls
 
 Because this rides the existing cloudflared tunnel, there's nothing new

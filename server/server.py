@@ -104,33 +104,76 @@ async def report(request: Request, authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
-@app.get("/api/status")
-async def status():
+def _build_stations_snapshot() -> List[Dict[str, Any]]:
+    """The online/offline-computed view -- shared by /api/status (the
+    frontend's own poll) and /api/health (a summarized count for an
+    external monitor), so the two can never drift on what "online" means.
+    Caller holds _lock.
+    """
     now = time.time()
     out: List[Dict[str, Any]] = []
-    with _lock:
-        for station_id, station in _state.items():
-            station_stale = (now - station["last_report_at"]) > OFFLINE_THRESHOLD_SECONDS
-            radios_out = []
-            for rid, r in station["radios"].items():
-                radio_stale = (now - r["_last_report_at"]) > OFFLINE_THRESHOLD_SECONDS
-                is_online = r["connected"] and not station_stale and not radio_stale
-                radios_out.append({
-                    "id": rid,
-                    "label": r["label"],
-                    "freq_hz": r["freq_hz"] if is_online else None,
-                    "band": r.get("band") if is_online else None,
-                    "mode": r["mode"] if is_online else None,
-                    "operator": r["operator"] if is_online else None,
-                    "source": r["source"],
-                    "status": "online" if is_online else "offline",
-                })
-            out.append({
-                "station_id": station_id,
-                "station_name": station["name"],
-                "radios": radios_out,
+    for station_id, station in _state.items():
+        station_stale = (now - station["last_report_at"]) > OFFLINE_THRESHOLD_SECONDS
+        radios_out = []
+        for rid, r in station["radios"].items():
+            radio_stale = (now - r["_last_report_at"]) > OFFLINE_THRESHOLD_SECONDS
+            is_online = r["connected"] and not station_stale and not radio_stale
+            radios_out.append({
+                "id": rid,
+                "label": r["label"],
+                "freq_hz": r["freq_hz"] if is_online else None,
+                "band": r.get("band") if is_online else None,
+                "mode": r["mode"] if is_online else None,
+                "operator": r["operator"] if is_online else None,
+                "source": r["source"],
+                "status": "online" if is_online else "offline",
             })
-    return JSONResponse({"stations": out, "server_time": now})
+        out.append({
+            "station_id": station_id,
+            "station_name": station["name"],
+            "radios": radios_out,
+        })
+    return out
+
+
+@app.get("/api/status")
+async def status():
+    with _lock:
+        stations = _build_stations_snapshot()
+    return JSONResponse({"stations": stations, "server_time": time.time()})
+
+
+@app.get("/api/health")
+async def health():
+    """For an external monitor (the ops dashboard), not the frontend.
+
+    Unlike contestscore's /api/health, this process has almost no internal
+    state to go wrong independent of the data it's reporting -- there's no
+    database, no socket to bind, just an in-memory dict behind a lock. So
+    `status` here is close to "did this request complete at all" (FastAPI
+    wouldn't have routed here otherwise), and the genuinely useful signal
+    is the online/offline breakdown itself -- a monitor that only checked
+    "does the process respond" would never notice every station going
+    quiet, since that failure is entirely in the agents, not this server.
+    """
+    with _lock:
+        stations = _build_stations_snapshot()
+
+    radios_total = 0
+    radios_online = 0
+    for station in stations:
+        for radio in station["radios"]:
+            radios_total += 1
+            if radio["status"] == "online":
+                radios_online += 1
+
+    return JSONResponse({
+        "status": "ok",
+        "stations_reporting": len(stations),
+        "radios_total": radios_total,
+        "radios_online": radios_online,
+        "offline_threshold_seconds": OFFLINE_THRESHOLD_SECONDS,
+    })
 
 
 # ---- Deploy metadata (for the frontend footer's "deployed at" line) -------
