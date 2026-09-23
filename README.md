@@ -112,6 +112,14 @@ rolling **`agent-latest`** pre-release with the four binaries attached, so
 "grab the current main build" is a one-click download from the Releases
 page. Or build them yourself with the commands below.
 
+**Versions:** the repo-root `VERSION` file (a date, matching the release
+tag) is the one version for both halves. CI stamps it plus the commit into
+the agent binary — `stationagent -version` prints it, e.g.
+`stationagent 2026.09.23+abc1234`, and so does the agent's startup log
+line — and the server shows the same `VERSION` in the status page footer
+(and at `/api/version`). Bump `VERSION` in the commit you tag for a
+release. A local `go build` reports `dev`.
+
 **ARM Linux / Chromebook:** the agent is pure Go with no cgo, so it
 cross-compiles to ARM with nothing more than a different `GOARCH`. On a
 Chromebook this means running it inside the Linux (Crostini) container:

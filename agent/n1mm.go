@@ -90,6 +90,15 @@ const n1mmSocketMaxIdle = 90 * time.Second
 // failure or a rebind, mirroring the backoff TCISource.Run uses.
 const n1mmReconnectBackoff = 2 * time.Second
 
+// n1mmReadBufferSize is big enough for any UDP datagram (max payload is
+// 65,507 bytes). N1MM can send its other broadcasts -- Score is the largest,
+// and grows with every band/mode in its breakdown -- on this same port, and
+// on Windows a datagram bigger than the buffer isn't silently truncated the
+// way it is on Linux: the read fails with WSAEMSGSIZE, which readLoop
+// treats as a socket error and rebinds, dropping RadioInfo traffic while it
+// does. The old 8 KB buffer left that within reach.
+const n1mmReadBufferSize = 65536
+
 type n1mmRadioInfo struct {
 	XMLName xml.Name `xml:"RadioInfo"`
 	RadioNr int      `xml:"RadioNr"`
@@ -233,7 +242,7 @@ func (s *N1MMSource) listen() (*net.UDPConn, error) {
 // than n1mmSocketMaxIdle, or Stop() is called. It returns (rather than
 // exiting the process) so Run() can rebind and keep going.
 func (s *N1MMSource) readLoop(conn *net.UDPConn) {
-	buf := make([]byte, 8192)
+	buf := make([]byte, n1mmReadBufferSize)
 	lastPacket := time.Now()
 	for {
 		conn.SetReadDeadline(time.Now().Add(n1mmReadPollInterval))

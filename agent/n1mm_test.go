@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -168,4 +169,42 @@ func TestN1MMStopIsIdempotent(t *testing.T) {
 	src := NewN1MMSource(0, "WT2P", "n1mm")
 	src.Stop()
 	src.Stop() // must not panic
+}
+
+// A datagram bigger than the old 8 KB read buffer must still be read whole.
+// On Linux the old buffer silently truncated it (breaking the XML); on
+// Windows the read failed outright and the socket was rebound.
+func TestN1MMRunReadsOversizedPacket(t *testing.T) {
+	probe, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0, IP: net.IPv4zero})
+	if err != nil {
+		t.Fatalf("failed to find a free port: %v", err)
+	}
+	port := probe.LocalAddr().(*net.UDPAddr).Port
+	probe.Close()
+
+	src := NewN1MMSource(port, "WT2P", "n1mm")
+	go src.Run()
+	defer src.Stop()
+
+	sender, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0, IP: net.IPv4zero})
+	if err != nil {
+		t.Fatalf("failed to open a sender socket: %v", err)
+	}
+	defer sender.Close()
+	dest := &net.UDPAddr{Port: port, IP: net.IPv4(127, 0, 0, 1)}
+
+	// Padding before </RadioInfo> so a truncated read loses the closing tag
+	// and fails to parse.
+	packet := strings.Replace(n1mmExamplePacket, "</RadioInfo>",
+		"<Padding>"+strings.Repeat("x", 10000)+"</Padding></RadioInfo>", 1)
+
+	for i := 0; i < 50; i++ {
+		sender.WriteToUDP([]byte(packet), dest) // ignore errors -- retried below
+		_, _, _, connected := src.GetRadio(1)
+		if connected {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("Run() never picked up an oversized packet sent over a real socket")
 }

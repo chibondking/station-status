@@ -185,6 +185,18 @@ async def health():
 # flow *is* the moment of deploy.
 _PROCESS_STARTED_AT = datetime.datetime.now(datetime.timezone.utc).isoformat()
 _DEPLOY_INFO_PATH = os.path.join(os.path.dirname(__file__), "deploy-info.json")
+# The repo-root VERSION file is the one version for both halves: the agent
+# build stamps it into the binary (see agent/main.go), and it's reported
+# here, so a station's agent can be matched against the server it talks to.
+_VERSION_PATH = os.path.join(os.path.dirname(__file__), "..", "VERSION")
+
+
+def _read_version() -> Optional[str]:
+    try:
+        with open(_VERSION_PATH) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
 
 
 def _git_short_commit() -> Optional[str]:
@@ -210,6 +222,7 @@ def _compute_version_info() -> Dict[str, Any]:
     except (OSError, ValueError):
         data = {}
     return {
+        "version": _read_version(),
         "commit": data.get("commit") or _git_short_commit(),
         "deployedAt": data.get("deployedAt") or _PROCESS_STARTED_AT,
     }
@@ -223,7 +236,7 @@ _VERSION_INFO = _compute_version_info()
 
 @app.get("/api/version")
 async def version():
-    """When this instance was last deployed, shown in the page footer."""
+    """Version and when this instance was last deployed, shown in the page footer."""
     return _VERSION_INFO
 
 

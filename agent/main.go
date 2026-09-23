@@ -139,7 +139,21 @@ func n1mmRadiosSnapshot(cfg *Config, src *N1MMSource, sourceLabel string) []radi
 	return radios
 }
 
+// version is stamped at build time by CI (-ldflags "-X main.version=...",
+// see .github/workflows/agent-build.yml) with the repo's VERSION file plus
+// the commit, so a running agent can be matched to a release -- and to the
+// server's own version, shown in the status page footer. A local
+// `go build` reports "dev".
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+		fmt.Println("stationagent", version)
+		return
+	}
+
+	disableQuickEdit()
+
 	configPath, sourceFlag, err := parseFlags(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)
@@ -150,6 +164,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("config error: %v", err)
 	}
+
+	log.Printf("stationagent %s starting: station=%q source=%s server=%s (report every %.0fs)",
+		version, cfg.StationID, cfg.Source, cfg.ServerURL, cfg.ReportIntervalSeconds)
 
 	var snapshot snapshotFunc
 	switch cfg.Source {

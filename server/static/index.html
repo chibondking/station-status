@@ -407,7 +407,8 @@ fetch('/api/version', { cache: 'no-store' })
     // timezone across the whole page.
     const when = d.toISOString().slice(0, 19).replace('T', ' ') + 'Z';
     const el = document.getElementById('deploy-info');
-    el.textContent = 'deployed ' + when + (v.commit ? ' (' + v.commit + ')' : '');
+    el.textContent = (v.version ? 'v' + v.version + ' \u00b7 ' : '') +
+      'deployed ' + when + (v.commit ? ' (' + v.commit + ')' : '');
     el.hidden = false;
   })
   .catch(() => {});

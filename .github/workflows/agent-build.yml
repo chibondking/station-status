@@ -63,7 +63,8 @@ jobs:
           GOARM: ${{ matrix.goarm }}
         run: |
           mkdir -p build
-          go build -trimpath -o "build/${{ matrix.name }}" .
+          version="$(tr -d '[:space:]' < ../VERSION)"
+          go build -trimpath -ldflags "-X main.version=${version}+${GITHUB_SHA::7}" -o "build/${{ matrix.name }}" .
           ls -la "build/${{ matrix.name }}"
       - uses: actions/upload-artifact@v4
         with:
