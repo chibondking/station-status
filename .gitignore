@@ -24,3 +24,10 @@ agent/*.test
 
 # OS cruft
 .DS_Store
+
+# Compiled agent binaries. `go build ./...` run inside agent/ drops one
+# here named after the module (stationagent); CI builds the real
+# per-OS/arch binaries into dist/ for a Release.
+agent/stationagent
+agent/stationagent-*
+dist/
