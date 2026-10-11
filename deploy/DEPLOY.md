@@ -100,6 +100,47 @@ monitor is the online/offline counts -- every station going quiet is an
 agent-side failure, not something a bare "is the process up" check would
 ever catch.
 
+## 9. Updating an existing install
+
+The box has a plain git checkout at `/opt/station-status`, owned by the
+`stationstatus` service user, and the service runs `server.py` straight
+out of it. So an update is a fast-forward and a restart:
+
+```bash
+sudo -u stationstatus git -C /opt/station-status fetch --tags --force origin || true
+sudo -u stationstatus git -C /opt/station-status merge --ff-only origin/main
+sudo systemctl restart station-status
+systemctl is-active station-status
+curl -s https://remote.wt2p.us/api/version
+```
+
+Three things worth knowing:
+
+- **Run git as `stationstatus`, not root.** The checkout is owned by that
+  user, and git refuses to operate on a repo owned by someone else
+  ("detected dubious ownership"). `sudo -u stationstatus` is right;
+  adding a `safe.directory` exception for root is not.
+- **`|| true` on the fetch is deliberate.** CI force-pushes the rolling
+  `agent-latest` tag on every merge to `main`, so a plain `fetch --tags`
+  reports `[rejected] agent-latest (would clobber existing tag)` and exits
+  non-zero. With `--force` it's fetched cleanly, and the `|| true` keeps a
+  `set -e` script from treating a tag note as a failed deploy.
+- **`/api/version` is the check that it took.** It serves the repo's
+  `VERSION` plus the commit, so if it still shows the old one, the restart
+  didn't pick up the new checkout. `deployedAt` is this process's start
+  time, which for this pull-and-restart flow *is* the deploy moment.
+
+Nothing else to do: there's no build step, and the venv only needs
+touching if a release adds a Python dependency (none so far -- still just
+`fastapi` and `uvicorn`).
+
+**The agent updates separately**, on each shack computer: download the
+binary for its OS/arch from the Release and restart it. An agent and
+server on different versions keep working -- `/api/report` is additive --
+but the status page footer shows the server's version and
+`stationagent -version` shows the agent's, so you can tell them apart
+when something looks off.
+
 ## Note on firewalls
 
 Because this rides the existing cloudflared tunnel, there's nothing new
@@ -107,3 +148,11 @@ to open -- no OS firewall change, no OCI Security List change. cloudflared
 only makes an outbound connection to Cloudflare; nothing needs to accept
 new inbound connections on this box for remote.wt2p.us to work, the same
 as your existing sites.
+
+That holds for the "last station worked" feature too (README: *Last
+station worked*). Its UDP port -- 14060 by default -- is opened by the
+**agent**, on the shack computer, where the logger already lives. The VPS
+listens on nothing new: the QSO arrives inside the agent's existing
+authenticated HTTPS report. If anything needs allowing, it's the shack
+machine's own firewall, and only if the logger runs on a different
+computer than the agent.

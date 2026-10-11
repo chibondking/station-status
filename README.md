@@ -14,7 +14,8 @@ A near-real-time station status page (K1TTT-style) built from:
   One agent process runs in exactly one mode, chosen via `"source"` in
   its config.json or the `--source` flag: `tci`, `n1mm`, or `dxlog`.
 - **`server/static/index.html`** — the actual page, polls `/api/status`
-  every 3s and renders a table per station, styled to match wt2p.us.
+  every 3s and renders a table per station, styled to match wt2p.us, plus
+  (optionally) each station's last logged QSO — see *Last station worked*.
 
 Everything has been **run and tested** in a sandbox — including the
 actual compiled Go binaries talking to the actual Python server, and real
@@ -47,6 +48,11 @@ binary — one station in N1MM mode, one in TCI (AetherSDR) mode:
   running, the agent reports `connected: false` and the radio goes
   Offline immediately. If the whole agent process dies, no reports arrive
   at all, and the server's staleness timeout (default 20s) catches that.
+- **Add-ons are not sources**: "last station worked" (an ADIF record per
+  QSO from the logger) runs alongside whichever source an agent is in,
+  with its own UDP port and its own goroutine, and contributes one
+  station-level field to the report. It never decides whether a radio is
+  online, so the live state the page exists for can't be affected by it.
 - **One source per agent process, chosen explicitly**: `config.go`
   requires a valid `"source"` (or `--source` flag) and refuses to start
   otherwise — no silent fallback, no guessing. N1MM/DXLog run on the shack
@@ -115,7 +121,7 @@ page. Or build them yourself with the commands below.
 **Versions:** the repo-root `VERSION` file (a date, matching the release
 tag) is the one version for both halves. CI stamps it plus the commit into
 the agent binary — `stationagent -version` prints it, e.g.
-`stationagent 2026.09.23+abc1234`, and so does the agent's startup log
+`stationagent 2026.10.11+abc1234`, and so does the agent's startup log
 line — and the server shows the same `VERSION` in the status page footer
 (and at `/api/version`). Bump `VERSION` in the commit you tag for a
 release. A local `go build` reports `dev`.
