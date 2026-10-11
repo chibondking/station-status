@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 // WT2P Station Status</title>
+    <meta name="robots" content="noindex">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Served for any unknown path that isn't under /api/ (see server.py's
+         not_found handler). Self-contained, like index.html: the styles
+         below are index.html's own, trimmed to what this page uses, so the
+         two share no file but do share a palette -- change one, change the
+         other. -->
+    <style>
+        :root {
+            --body-bg: #0d0d0d;
+            --window-bg: #121212;
+            --sidebar-bg: #090909;
+            --accent-color: #ff9400;
+            --accent-hover: #ffaa33;
+            --accent-glow: rgba(255, 148, 0, 0.2);
+            --accent-dim: #804a00;
+            --body-color: #ffaa00;
+            --body-color-muted: #cc7a00;
+            --border-color: #261a00;
+            --highlight-bg: #211500;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--body-bg);
+            color: var(--body-color);
+            font-family: "Fira Code", monospace;
+            line-height: 1.6;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            min-width: 0;
+            max-width: 800px;
+            background-color: var(--window-bg);
+            border: 1px solid var(--accent-dim);
+            box-shadow: 0 0 20px var(--accent-glow);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        header {
+            background-color: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .callsign-title {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.75rem;
+        }
+
+        .callsign {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            text-shadow: 0 0 8px var(--accent-glow);
+            letter-spacing: 2px;
+            text-decoration: none;
+        }
+
+        .subtitle { font-size: 0.85rem; color: var(--body-color-muted); }
+
+        .status {
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            border: 1px solid var(--accent-dim);
+            padding: 0.25rem 0.5rem;
+            border-radius: 2px;
+            background: var(--highlight-bg);
+        }
+
+        .content { padding: 2rem 1.5rem; }
+
+        h2 {
+            font-size: 1.1rem;
+            color: var(--accent-color);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 0.25rem;
+        }
+
+        .code {
+            font-size: clamp(2.5rem, 12vw, 4rem);
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--accent-color);
+            text-shadow: 0 0 12px var(--accent-glow);
+            letter-spacing: 3px;
+        }
+
+        .lede { margin: 0.25rem 0 1.25rem; color: var(--body-color); }
+        .hint { color: var(--body-color-muted); font-size: 0.85rem; }
+
+        .links { list-style: none; margin: 1.25rem 0 0; }
+        .links li {
+            background-color: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent-color);
+            border-radius: 3px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.6rem;
+        }
+        .links a {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .links a:hover { color: var(--accent-hover); }
+        .links small { display: block; color: var(--body-color-muted); font-weight: 400; }
+
+        .repo-footer {
+            border-top: 1px solid var(--border-color);
+            padding: 0.9rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--body-color-muted);
+        }
+        .repo-footer a { color: var(--body-color-muted); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="callsign-title">
+                <a class="callsign" href="/">WT2P</a>
+                <span class="subtitle">// AMATEUR RADIO &amp; ENGINEERING</span>
+            </div>
+            <div class="status">404 Not Found</div>
+        </header>
+
+        <div class="content">
+            <div class="section">
+                <h2>Nothing on this frequency</h2>
+                <p class="code">404</p>
+                <p class="lede">That page isn't here &mdash; moved, renamed, or never existed.</p>
+                <p class="hint">Nothing is broken; the station status page itself is fine.</p>
+                <ul class="links">
+                    <li><a href="/">Station status<small>live radio state, and the last QSO logged</small></a></li>
+                    <li><a href="https://wt2p.us">wt2p.us<small>the rest of the shack</small></a></li>
+                    <li><a href="https://scoreboard.wt2p.us">Contest scoreboard<small>live QSOs during a contest</small></a></li>
+                </ul>
+            </div>
+        </div>
+
+        <footer class="repo-footer">
+            <span>Created by <a href="https://wt2p.us" target="_blank" rel="noopener">WT2P</a> &middot; <a href="https://github.com/chibondking/station-status" target="_blank" rel="noopener">GitHub</a></span>
+            <span>73</span>
+        </footer>
+    </div>
+
+</body>
+</html>

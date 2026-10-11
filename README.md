@@ -400,6 +400,38 @@ keeps showing the last QSO with its own timestamp — including while the
 station is offline, unlike the radio rows, which blank because a
 frequency is a claim about *right now* while a logged QSO is a dated fact.
 
+## 404s, and what the API answers (added 2026-10-11)
+
+Two things a public hostname shouldn't do, both fixed in `server.py`:
+
+- **An unknown page used to return `{"detail":"Not Found"}`.** Visiting
+  `remote.wt2p.us/foo` in a browser got a JSON blob, which is both useless
+  to a person and an advertisement that there's an API here. Unknown paths
+  now get `server/static/404.html` -- the site's own chrome, amber on
+  near-black, with links back to the status page -- with a real 404 status
+  so monitors and crawlers aren't misled.
+- **FastAPI's `/docs`, `/redoc` and `/openapi.json` were live**, handing
+  any visitor a browsable map of every route including `POST /api/report`,
+  the authenticated ingest. They're switched off
+  (`FastAPI(docs_url=None, redoc_url=None, openapi_url=None)`) -- the only
+  clients are the agent and this project's own page, and the routes are
+  documented here. Those three paths now get the 404 page like any other
+  unknown URL.
+
+**An unknown `/api/...` path still answers JSON** (`{"detail": "not
+found"}`, 404): an HTML page would be useless to the agent or to curl. The
+split is purely on the path prefix, so adding an API route never changes
+which kind of 404 it produces. Every non-404 status -- 401 for a bad
+token, 400 for a report with no `station_id` -- keeps FastAPI's normal
+JSON shape unchanged, since those are only ever seen by the agent.
+
+One subtlety worth knowing before touching this: the `StaticFiles` mount
+at `/` is greedy *and*, with `html=True`, answers its own 404s by serving
+`404.html` itself. So the unknown-`/api/...` case needs **real routes**
+(`/api`, `/api/`, `/api/{rest:path}`, declared after every real one), not
+just an exception handler -- otherwise the mount wins and `curl
+/api/typo` gets a page of HTML.
+
 ## What's been tested (in a sandbox, not on your hardware)
 
 - Go unit tests (`go test ./...` in `agent/`), including:
@@ -446,6 +478,15 @@ frequency is a claim about *right now* while a logged QSO is a dated fact.
     unset, `Band` is `nil` and `FreqHz` is sent unchanged. Also confirms
     `mode`/`operator` are untouched by contest mode and that the config
     field parses with no special validation (omitted ⇒ false).
+- 404 behavior, every path checked against a locally running server:
+  `/foo` and `/deep/path/here` -> the styled page with a 404 status;
+  `/docs`, `/redoc`, `/openapi.json` -> the same page, 404 (not FastAPI's
+  explorer); `/api`, `/api/`, `/api/foo`, `GET /api/report` ->
+  `{"detail":"not found"}` as JSON; `/`, `/index.html`, `/api/status`,
+  `/api/health` -> unchanged 200s; and no regression on the error shapes
+  the agent sees (401 `bad or missing token`, 400 `station_id required`,
+  and a real report with a `last_worked` still round-tripping to
+  `/api/status`).
 - All binaries cross-compiled and confirmed by `file`: a real PE32+
   Windows binary, a static ELF64 x86-64 Linux binary, a static ELF64 ARM
   aarch64 binary (`stationagent-linux-arm64`, for ARM Chromebooks via

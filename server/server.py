@@ -22,8 +22,9 @@ import threading
 from typing import Dict, Any, List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # ---- Config (env vars, with defaults for local testing) -------------------
 
@@ -36,7 +37,14 @@ OFFLINE_THRESHOLD_SECONDS = float(os.environ.get("STATUS_OFFLINE_THRESHOLD", "20
 HOST = os.environ.get("STATUS_HOST", "0.0.0.0")
 PORT = int(os.environ.get("STATUS_PORT", "8000"))
 
-app = FastAPI()
+# docs_url / redoc_url / openapi_url off: FastAPI publishes /docs, /redoc
+# and /openapi.json by default, and on a public hostname that hands any
+# visitor a browsable map of the API -- including POST /api/report, the
+# authenticated ingest route. Nothing here needs a schema explorer: the
+# only clients are the agent and this project's own page, and the routes
+# are documented in the README. (CJ, 2026-10-11, after finding them live
+# on remote.wt2p.us.)
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 # ---- In-memory state --------------------------------------------------
 # station_id -> {
@@ -284,8 +292,67 @@ async def version():
     return _VERSION_INFO
 
 
-# Serve the frontend (index.html + assets) from ../server/static
+# ---- 404s ---------------------------------------------------------------
+# Two different kinds of caller want two different answers:
+#   - a person who mistyped a URL gets the styled page (static/404.html),
+#     not `{"detail":"Not Found"}`, which is what a browser used to see
+#     for /foo and which advertises "there's a JSON API here" to anyone
+#     poking around;
+#   - an API client gets a small JSON body, because an HTML page in
+#     response to GET /api/whatever is useless to the agent and to curl.
+# The split is on the path, so adding an API route never changes which
+# kind of 404 it produces.
+
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
+_404_PATH = os.path.join(_static_dir, "404.html")
+
+
+def _is_api_path(path: str) -> bool:
+    return path == "/api" or path.startswith("/api/")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Styled page for a browser's 404, JSON for everything else.
+
+    This catches the StaticFiles mount's own 404 as well as the API
+    routes', since the mount runs inside this app's exception middleware.
+    Every non-404 status (401 from a bad token, 400 from a report with no
+    station_id) keeps FastAPI's normal JSON shape -- those are only ever
+    seen by the agent, and changing them would break its logging.
+    """
+    if exc.status_code != 404:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    if _is_api_path(request.url.path):
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    if os.path.exists(_404_PATH):
+        return FileResponse(_404_PATH, status_code=404, media_type="text/html")
+    return PlainTextResponse("404 Not Found", status_code=404)
+
+
+# An unknown /api/... path has to be a real route, not just an exception
+# handler: the StaticFiles mount below is greedy AND, with html=True,
+# answers its own 404s by serving 404.html -- so without these routes the
+# mount, not the handler, decides what an API client sees, and `curl
+# /api/typo` gets a page of HTML. Declared after every real API route, so
+# they only ever catch what nothing else wanted. Bare "/api" needs its own
+# entry: "/api/{rest:path}" doesn't match a path with no trailing slash.
+_API_404_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
+
+
+@app.api_route("/api", methods=_API_404_METHODS)
+@app.api_route("/api/", methods=_API_404_METHODS)
+async def api_root_not_found():
+    return JSONResponse({"detail": "not found"}, status_code=404)
+
+
+@app.api_route("/api/{rest:path}", methods=_API_404_METHODS)
+async def api_not_found(rest: str):
+    return JSONResponse({"detail": "not found"}, status_code=404)
+
+
+# Serve the frontend (index.html + assets) from ../server/static. Mounted
+# last: it matches everything, so anything above wins over it.
 app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
 
 
