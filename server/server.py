@@ -42,6 +42,12 @@ app = FastAPI()
 # station_id -> {
 #   "name": str,
 #   "last_report_at": float (epoch seconds),
+#   "last_worked": {       # the agent's last-worked add-on (optional);
+#       "call": str,       # absent entirely when the agent doesn't send it
+#       "mode": Optional[str],
+#       "at": str,         # the QSO's own time, UTC ISO-8601
+#       "source": str,     # "qrzero" -- which integration it came in on
+#   },
 #   "radios": {
 #       radio_id: {
 #           "label": str,
@@ -59,6 +65,19 @@ app = FastAPI()
 # }
 _state: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
+
+
+def _clip(value: Any, limit: int) -> Optional[str]:
+    """A trimmed string of at most `limit` characters, or None.
+
+    Reports are authenticated, but the values inside a last-worked come
+    from an ADIF record off the shack LAN, so the one thing worth enforcing
+    centrally is that a callsign can't arrive as a kilobyte of anything.
+    """
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value[:limit] or None
 
 
 def _check_auth(authorization: Optional[str]):
@@ -84,6 +103,22 @@ async def report(request: Request, authorization: Optional[str] = Header(None)):
         station = _state.setdefault(station_id, {"name": station_name, "radios": {}})
         station["name"] = station_name
         station["last_report_at"] = now
+
+        # "Last station worked" is pass-through: the agent on the shack
+        # computer is what listens for ADIF records (its adif.go) and
+        # decides what a QSO is. Nothing here parses ADIF, and there is no
+        # UDP port or ADIF endpoint on this server -- same rule the N1MM
+        # path follows. All this does is hold the last one reported and
+        # hand it to the page, with the lengths capped because the values
+        # originate from whatever logger is on that LAN.
+        last_worked = payload.get("last_worked")
+        if isinstance(last_worked, dict) and last_worked.get("call"):
+            station["last_worked"] = {
+                "call": _clip(last_worked.get("call"), 20),
+                "mode": _clip(last_worked.get("mode"), 12),
+                "at": _clip(last_worked.get("at"), 40),
+                "source": _clip(last_worked.get("source"), 20),
+            }
 
         radios = station["radios"]
         for r in radios_in:
@@ -132,6 +167,12 @@ def _build_stations_snapshot() -> List[Dict[str, Any]]:
             "station_id": station_id,
             "station_name": station["name"],
             "radios": radios_out,
+            # Not blanked when the station goes offline, unlike the radio
+            # rows: a radio's frequency is a claim about right now, while a
+            # logged QSO is a dated fact that stays true. It carries its own
+            # UTC timestamp, which the page shows, so a reader can see for
+            # themselves whether it was a minute or a month ago.
+            "last_worked": station.get("last_worked"),
         })
     return out
 

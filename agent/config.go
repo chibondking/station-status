@@ -53,6 +53,19 @@ type Config struct {
 	// different default than N1MM's, confirmed via DXLog's docs, not
 	// carried over by assumption.
 	DXLogPort int `json:"dxlog_port"`
+	// LastWorked turns on the "Last station worked" add-on: the agent
+	// also listens for an ADIF record per logged QSO (adif.go) and
+	// reports the date, time, callsign and mode alongside the radios.
+	// Independent of Source -- it runs with tci, n1mm or dxlog, because
+	// the logger sending ADIF needn't be the thing driving the radios.
+	LastWorked bool `json:"last_worked"`
+	// AdifPort is where that listens. Unlike n1mm_port/dxlog_port -- other
+	// programs' ports, which this refuses to guess -- this one is OUR
+	// choice of where to receive, so it has a real default (14060, clear
+	// of N1MM's 12060-12062 and DXLog's 13063). Setting it also switches
+	// the feature on, so `last_worked` can be left out.
+	AdifPort int `json:"adif_port"`
+
 	// Used when OpCall and mycall are both empty (shouldn't normally
 	// happen -- N1MM/DXLog default OpCall to the station callsign itself
 	// -- but this is a defensive fallback, not a guess dressed up as fact).
@@ -101,7 +114,39 @@ func loadConfig(path string, sourceFlag string) (*Config, error) {
 	if cfg.ReportIntervalSeconds <= 0 {
 		cfg.ReportIntervalSeconds = 5
 	}
+
+	if err := resolveLastWorked(&cfg); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// resolveLastWorked settles the last-worked add-on's port and refuses a
+// configuration that can't work. A port collision is the failure worth
+// catching here: in n1mm/dxlog mode this process is already bound to the
+// logger's broadcast port, and listening for ADIF on that same port would
+// mean two sockets on one port in one process -- which on Linux doesn't
+// even error, it just splits the traffic unpredictably between them. Far
+// better to say so at startup than to debug a dashboard that loses half
+// its radio updates whenever a QSO is logged.
+func resolveLastWorked(cfg *Config) error {
+	if !cfg.LastWorked && cfg.AdifPort == 0 {
+		return nil // off, the default
+	}
+	cfg.LastWorked = true
+	if cfg.AdifPort == 0 {
+		cfg.AdifPort = adifDefaultPort
+	}
+	if cfg.AdifPort < 1 || cfg.AdifPort > 65535 {
+		return fmt.Errorf("adif_port %d is not a valid port (1-65535)", cfg.AdifPort)
+	}
+	switch cfg.AdifPort {
+	case cfg.N1MMPort:
+		return fmt.Errorf("adif_port %d collides with n1mm_port -- point your logger's ADIF connection at a different port (default %d), away from N1MM's own", cfg.AdifPort, adifDefaultPort)
+	case cfg.DXLogPort:
+		return fmt.Errorf("adif_port %d collides with dxlog_port -- point your logger's ADIF connection at a different port (default %d), away from DXLog's own", cfg.AdifPort, adifDefaultPort)
+	}
+	return nil
 }
 
 func validateRadioNrs(radios []RadioConfig, source string) error {

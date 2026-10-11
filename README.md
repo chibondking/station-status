@@ -305,6 +305,85 @@ through the real snapshot code path: with `contest_mode` on a report's
 behavior is byte-for-byte unchanged (`Band` nil, `FreqHz` sent as
 normal).
 
+## Last station worked — an ADIF record per QSO (added 2026-10-11)
+
+The page can show the last QSO the logger put on the air, under that
+station's radios: **date, time (UTC), callsign and mode**, with a
+`QRZero Logged` chip.
+
+Set it up in the agent's config.json (sibling of `"source"`, a
+whole-agent-process setting like `contest_mode`):
+
+```json
+"last_worked": true,
+"adif_port": 14060
+```
+
+`adif_port` alone is enough — it switches the feature on. `last_worked`
+alone is enough too; the port then defaults to **14060**. Omit both and
+nothing changes.
+
+Then, in the logger, point a UDP connection at the agent's machine on that
+port. In **QRZero** (https://github.com/nreed97/QRZero) that's
+**Settings → UDP connections**: *Sends when* = **QSO logged**, *Format* =
+**ADIF record**, host = the agent's computer (`127.0.0.1` if it's the same
+one), port = `14060`. Its **Send test** button fires a sample record
+straight away, which is the quickest way to see the line appear.
+
+**Why 14060:** it is nowhere near N1MM's 12060 / 12061 / 12062 or DXLog's
+13063, so pointing a logger here can never collide with a radio-state
+broadcast — including the one this very agent may be listening to in
+`n1mm` mode. Two UDP sockets on one port inside one process don't error on
+Linux, they just split the traffic unpredictably, so the agent **refuses
+to start** if `adif_port` equals the configured `n1mm_port` or
+`dxlog_port`, rather than letting you debug that later.
+
+**It runs in the agent, not the server.** `agent/adif.go` does the
+listening and the parsing on the shack computer; what leaves the LAN is
+the same authenticated HTTPS report the agent already sends, with one
+extra `last_worked` object. The server has no ADIF endpoint and no UDP
+port — the same rule the N1MM path follows — it only holds the last one
+reported and hands it to the page.
+
+**Only those four fields are sent.** An ADIF record carries everything the
+logger knows about a QSO: frequency, reports, grid, name, QTH, comment.
+None of it is read, and none of it leaves the shack LAN. That is also the
+privacy answer — there is nothing for `contest_mode` to mask here, because
+nothing else is sent. `adif_test.go` asserts it against a real
+QRZero-shaped record, so widening the payload means changing that test on
+purpose.
+
+**Wire format**, taken from QRZero's own source (`crates/server/src/
+udp_out.rs`'s `Format::Adif` → `crates/core/src/adif.rs`'s `write_record`)
+rather than assumed, and from its user docs (*UDP connections and startup
+programs*):
+
+```
+<CALL:6>DL1ABC <QSO_DATE:8>20261011 <TIME_ON:6>011530 <BAND:3>20m <FREQ:7>14.0255 <MODE:2>CW <RST_SENT:3>599 <RST_RCVD:3>579 <EOR>
+```
+
+One datagram, one bare record — no ADIF header, no `<EOH>`. Details that
+matter and were checked, not guessed:
+- the **length in each tag** decides where a value ends, so a `COMMENT` or
+  `NAME` containing spaces doesn't derail the parse;
+- a digital QSO's real mode is in **`SUBMODE`** (ADIF stores FT4 as
+  `MODE=MFSK` + `SUBMODE=FT4`), so `SUBMODE` wins — otherwise an FT4 QSO
+  would read "MFSK";
+- `QSO_DATE`/`TIME_ON` are **UTC**, and `TIME_ON` may be `HHMMSS` or
+  `HHMM`. A record with no usable time falls back to when it arrived.
+
+**The chip says which port, not which program.** Nothing in an ADIF record
+identifies the sender, so `QRZero Logged` means "came in on the agent's
+ADIF connection" — which is what QRZero's *QSO logged* connection is.
+Any logger that can send an ADIF record to a UDP port works the same way.
+
+**It doesn't expire and it doesn't affect online/offline.** A QSO is an
+event, not a heartbeat: hours of silence between contests is normal, so
+there is no timeout after which "no records" means anything. The line
+keeps showing the last QSO with its own timestamp — including while the
+station is offline, unlike the radio rows, which blank because a
+frequency is a claim about *right now* while a logged QSO is a dated fact.
+
 ## What's been tested (in a sandbox, not on your hardware)
 
 - Go unit tests (`go test ./...` in `agent/`), including:
@@ -328,6 +407,19 @@ normal).
     out-of-band inputs (including 0 and a negative) return `"OOB"` without
     panicking. Band table is also asserted to be ascending and
     non-overlapping.
+  - `adif_test.go` — the last-worked path: a real QRZero-shaped record
+    parses to the right call/mode/UTC timestamp; a value with spaces
+    (`COMMENT`, `NAME`) survives because the declared length is honoured;
+    `SUBMODE` beats `MODE` so FT4 isn't "MFSK"; `TIME_ON` as `HHMM`, a
+    garbage `TIME_ON`, and a record with no time at all all behave; a
+    record with no `CALL` is dropped; several records in one datagram keep
+    the last; an N1MM `<RadioInfo>` packet, a bad length, an unterminated
+    tag and plain junk are ignored *without* overwriting a good QSO; an
+    ADIF file's header doesn't leak into the first record; lower-case
+    field names work; the port rules (default 14060, a port alone enabling
+    the feature, refusing a collision with `n1mm_port`/`dxlog_port`); and
+    the payload is asserted to carry only date/time/call/mode — the test
+    fails if `FREQ`, `BAND`, reports or a name ever leak into it.
   - `contest_mode_test.go` — the privacy property, through the real
     snapshot code path for both TCI and N1MM/DXLog: with `contest_mode`
     on, a report's `FreqHz` is `nil` and `Band` is set; with it off or
@@ -349,6 +441,14 @@ normal).
   - `--source` flag confirmed to override a config.json with no
     `"source"` field; missing source with no flag fails with a clear
     error instead of guessing a default.
+  - Last station worked: the **actual compiled binary** in `n1mm` mode
+    with `"last_worked": true`, a QRZero-shaped ADIF record sent to
+    :14060 over a real socket → the agent → the real Python server →
+    `/api/status` carrying
+    `"last_worked":{"call":"DL1ABC","mode":"CW","at":"2026-10-11T01:15:30Z","source":"qrzero"}`
+    and the page rendering `Last worked DL1ABC CW QRZero Logged
+    2026-10-11 01:15Z`. Not yet tested against QRZero itself — its
+    **Send test** button is the first thing to try on your hardware.
   - DXLog mode: a real UDP packet sent to port 13063 (its documented
     port, distinct from N1MM's 12060) → the actual compiled `dxlog`-mode
     binary → the real server → `/api/status` showing 14.0805 MHz, USB,

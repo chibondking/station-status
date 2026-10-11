@@ -160,6 +160,34 @@
             color: var(--body-color-muted);
         }
 
+        /* "Last station worked" -- one line under a station's radios, fed
+           by an ADIF record per QSO from the logger (QRZero). Sits below
+           the table, quieter than the radio rows: it's context, not the
+           live state the page exists for. */
+        .last-worked {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.5rem 0 0;
+            padding: 0.4rem 0.6rem;
+            border: 1px dashed var(--border-color);
+            border-radius: 3px;
+            font-size: 0.8rem;
+            color: var(--body-color-muted);
+        }
+        .last-worked .lw-call {
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+        }
+        .last-worked .lw-mode { color: var(--body-color); }
+        .last-worked .lw-when { margin-left: auto; }
+        @media (max-width: 560px) {
+            .last-worked .lw-when { margin-left: 0; }
+        }
+
         .updated {
             color: var(--body-color-muted);
             font-size: 0.78rem;
@@ -323,6 +351,66 @@ function sourceLabel(source) {
   return '';
 }
 
+// The chip on a last-worked QSO. It names the route the QSO came in on --
+// the agent's ADIF-over-UDP port, which is QRZero's "QSO logged"
+// connection -- not a detection of which program sent it; an ADIF record
+// doesn't say. Anything else gets no chip rather than a guess.
+function lastWorkedChip(source) {
+  if (source === 'qrzero') return 'QRZero Logged';
+  return '';
+}
+
+// Date and time of the QSO, as UTC -- the two fields on their own, since
+// that's what an operator reads off a log. Falls back to showing the raw
+// string if it isn't a timestamp we can parse, rather than printing
+// "Invalid Date".
+function fmtQsoWhen(at) {
+  const d = new Date(at);
+  if (isNaN(d.getTime())) return { date: at || '', time: '' };
+  const iso = d.toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) + 'Z' };
+}
+
+// Built with textContent rather than innerHTML: a callsign and mode come
+// from an ADIF record off the shack LAN, which is the one thing on this
+// page that isn't from our own config or N1MM.
+function lastWorkedEl(lw) {
+  const when = fmtQsoWhen(lw.at);
+  const el = document.createElement('div');
+  el.className = 'last-worked';
+
+  const label = document.createElement('span');
+  label.textContent = 'Last worked';
+  el.appendChild(label);
+
+  const call = document.createElement('span');
+  call.className = 'lw-call';
+  call.textContent = lw.call;
+  el.appendChild(call);
+
+  if (lw.mode) {
+    const mode = document.createElement('span');
+    mode.className = 'lw-mode';
+    mode.textContent = lw.mode;
+    el.appendChild(mode);
+  }
+
+  const chip = lastWorkedChip(lw.source);
+  if (chip) {
+    const tag = document.createElement('span');
+    tag.className = 'source-tag';
+    tag.textContent = chip;
+    el.appendChild(tag);
+  }
+
+  const whenEl = document.createElement('span');
+  whenEl.className = 'lw-when';
+  whenEl.textContent = [when.date, when.time].filter(Boolean).join(' ');
+  el.appendChild(whenEl);
+
+  return el;
+}
+
 function render(data) {
   const content = document.getElementById('content');
   content.innerHTML = '';
@@ -366,6 +454,10 @@ function render(data) {
       tbody.appendChild(tr);
     }
     content.appendChild(table);
+
+    if (station.last_worked && station.last_worked.call) {
+      content.appendChild(lastWorkedEl(station.last_worked));
+    }
   }
 
   if (anyMasked) {

@@ -7,6 +7,8 @@
   "api_token": "changeme",
   "report_interval_seconds": 5,
   "n1mm_port": 12060,
+  "last_worked": true,
+  "adif_port": 14060,
   "default_operator": "WT2P",
   "radios": [
     { "id": "radio1", "label": "Radio 1", "radio_nr": 1 },

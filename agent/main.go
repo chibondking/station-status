@@ -29,6 +29,12 @@ type reportPayload struct {
 	StationID   string        `json:"station_id"`
 	StationName string        `json:"station_name"`
 	Radios      []radioReport `json:"radios"`
+	// LastWorked is the last QSO the logger broadcast as an ADIF record
+	// (adif.go), or nil when the add-on is off or nothing has been logged
+	// since the agent started. Station-level, not per radio: an ADIF
+	// record says which band and mode a QSO was on, but nothing that
+	// reliably ties it to one of this station's radios.
+	LastWorked *lastWorked `json:"last_worked,omitempty"`
 }
 
 func tciSourceKey(host string, port int) string {
@@ -178,6 +184,17 @@ func main() {
 		snapshot = buildDXLogSnapshot(cfg)
 	}
 
+	// The last-worked add-on runs alongside whatever source is in use --
+	// its own UDP listener, its own goroutine, nothing shared with the
+	// radio path. If its socket can't bind, Run() logs and retries; the
+	// radios keep reporting either way.
+	var adifSrc *AdifSource
+	if cfg.LastWorked {
+		adifSrc = NewAdifSource(cfg.AdifPort)
+		go adifSrc.Run()
+		log.Printf("last station worked: listening for ADIF records on UDP :%d", cfg.AdifPort)
+	}
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	interval := time.Duration(cfg.ReportIntervalSeconds * float64(time.Second))
 	ticker := time.NewTicker(interval)
@@ -190,6 +207,9 @@ func main() {
 			StationID:   cfg.StationID,
 			StationName: cfg.StationName,
 			Radios:      snapshot(),
+		}
+		if adifSrc != nil {
+			payload.LastWorked = adifSrc.GetLastWorked()
 		}
 		body, err := json.Marshal(payload)
 		if err != nil {
