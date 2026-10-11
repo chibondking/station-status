@@ -23,6 +23,13 @@ type radioReport struct {
 	Operator  *string `json:"operator"`
 	Connected bool    `json:"connected"`
 	Source    string  `json:"source"`
+	// Tx is live transmit state, and only the TCI path can ever set it:
+	// TCI is a direct link to the radio and says so explicitly (trx:),
+	// while N1MM/DXLog's <RadioInfo> broadcast describes where a radio is
+	// tuned, not whether it's keyed. The other sources leave this false
+	// rather than inferring one, so a false here always means "not
+	// transmitting", never "we couldn't tell".
+	Tx bool `json:"tx"`
 }
 
 type reportPayload struct {
@@ -86,7 +93,7 @@ func tciRadiosSnapshot(cfg *Config, sources map[string]*TCISource) []radioReport
 	for _, r := range cfg.Radios {
 		key := tciSourceKey(r.TCIHost, r.TCIPort)
 		src := sources[key]
-		freq, mode := src.GetReceiver(r.TCIReceiver)
+		freq, mode, tx := src.GetReceiver(r.TCIReceiver)
 		outFreq, band := maskFreq(cfg, freq)
 		radios = append(radios, radioReport{
 			ID:        r.ID,
@@ -97,6 +104,11 @@ func tciRadiosSnapshot(cfg *Config, sources map[string]*TCISource) []radioReport
 			Operator:  nil, // not available from TCI
 			Connected: src.IsConnected(),
 			Source:    "tci",
+			// Deliberately not masked by contest_mode. What that mode
+			// protects is the exact frequency you're running -- "this
+			// radio is keyed right now" gives away nothing about where,
+			// and it's the most useful thing on the page while it's true.
+			Tx: tx,
 		})
 	}
 	return radios
