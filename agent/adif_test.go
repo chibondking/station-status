@@ -36,6 +36,42 @@ func TestRecordToLastWorkedFromQRZeroRecord(t *testing.T) {
 	if lw.At != "2026-10-11T01:15:30Z" {
 		t.Errorf("at = %q, want 2026-10-11T01:15:30Z", lw.At)
 	}
+	// 14.0255 MHz masked to its band name, via band.go's own table --
+	// upper case, like a contest-mode radio row, not ADIF's "20m".
+	if lw.Band == nil || *lw.Band != "20M" {
+		t.Errorf("band = %v, want 20M", lw.Band)
+	}
+}
+
+// The mask itself: the frequency is read and thrown away, and the band
+// comes from band.go rather than from ADIF's own spelling. This is the
+// test that fails if someone starts reporting FREQ.
+func TestLastWorkedMasksFrequencyToBand(t *testing.T) {
+	// FREQ present: band is derived, whatever BAND says.
+	rec := parseAdifRecords("<CALL:4>W1AW <FREQ:8>21.00500 <BAND:3>20m <EOR>")[0]
+	lw := recordToLastWorked(rec, time.Now())
+	if lw.Band == nil || *lw.Band != "15M" {
+		t.Errorf("band = %v, want 15M derived from FREQ (not BAND's 20m)", lw.Band)
+	}
+	// No FREQ: fall back to ADIF's BAND, upper-cased.
+	rec = parseAdifRecords("<CALL:4>W1AW <BAND:4>70cm <EOR>")[0]
+	if lw := recordToLastWorked(rec, time.Now()); lw.Band == nil || *lw.Band != "70CM" {
+		t.Errorf("band = %v, want 70CM from ADIF's BAND", lw.Band)
+	}
+	// Neither: no band rather than a guess.
+	rec = parseAdifRecords("<CALL:4>W1AW <MODE:2>CW <EOR>")[0]
+	if lw := recordToLastWorked(rec, time.Now()); lw.Band != nil {
+		t.Errorf("band = %v, want nil with neither FREQ nor BAND", lw.Band)
+	}
+	// A frequency in no amateur band gets band.go's sentinel, not a lie.
+	rec = parseAdifRecords("<CALL:4>W1AW <FREQ:6>27.555 <EOR>")[0]
+	if lw := recordToLastWorked(rec, time.Now()); lw.Band == nil || *lw.Band != "OOB" {
+		t.Errorf("band = %v, want OOB", lw.Band)
+	}
+	// Rounding: 14.0255 MHz must not land a hair under 14,025,500 Hz.
+	if hz, ok := parseAdifFreqHz("14.0255"); !ok || hz != 14_025_500 {
+		t.Errorf("parseAdifFreqHz(14.0255) = %d, %v; want 14025500, true", hz, ok)
+	}
 }
 
 // A value with spaces in it is why the declared length has to be the
@@ -51,22 +87,24 @@ func TestParseAdifRecordsKeepsValuesWithSpaces(t *testing.T) {
 	}
 }
 
-// Only the four fields are reported. This is the test that fails if
-// somebody widens the payload without widening the decision -- frequency
-// is right there in the record and deliberately not carried.
-func TestLastWorkedReportsOnlyDateTimeCallMode(t *testing.T) {
+// Only the agreed fields are reported. This is the test that fails if
+// somebody widens the payload without widening the decision -- the
+// reports, the name and the comment are right there in the record, and
+// the exact frequency is deliberately replaced by its band.
+func TestLastWorkedReportsOnlyDateTimeCallModeBand(t *testing.T) {
 	lw := recordToLastWorked(parseAdifRecords(qrzeroRecord)[0], time.Now())
 	raw, err := json.Marshal(lw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := string(raw)
-	for _, leaked := range []string{"14.0255", "freq", "FREQ", "20m", "band", "599", "Hans", "COMMENT", "comment"} {
+	// The band name is reported; the frequency it came from is not.
+	for _, leaked := range []string{"14.0255", "freq", "FREQ", "14025500", "599", "579", "Hans", "COMMENT", "comment"} {
 		if strings.Contains(body, leaked) {
 			t.Errorf("report leaked %q: %s", leaked, body)
 		}
 	}
-	for _, want := range []string{`"call":"DL1ABC"`, `"mode":"CW"`, `"at":"2026-10-11T01:15:30Z"`, `"source":"qrzero"`} {
+	for _, want := range []string{`"call":"DL1ABC"`, `"mode":"CW"`, `"band":"20M"`, `"at":"2026-10-11T01:15:30Z"`, `"source":"qrzero"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("report missing %s: %s", want, body)
 		}

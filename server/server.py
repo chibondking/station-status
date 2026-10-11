@@ -45,6 +45,8 @@ app = FastAPI()
 #   "last_worked": {       # the agent's last-worked add-on (optional);
 #       "call": str,       # absent entirely when the agent doesn't send it
 #       "mode": Optional[str],
+#       "band": Optional[str],  # a band NAME ("20M"); the agent masks the
+#                               # QSO's frequency the way contest_mode does
 #       "at": str,         # the QSO's own time, UTC ISO-8601
 #       "source": str,     # "qrzero" -- which integration it came in on
 #   },
@@ -116,6 +118,7 @@ async def report(request: Request, authorization: Optional[str] = Header(None)):
             station["last_worked"] = {
                 "call": _clip(last_worked.get("call"), 20),
                 "mode": _clip(last_worked.get("mode"), 12),
+                "band": _clip(last_worked.get("band"), 12),
                 "at": _clip(last_worked.get("at"), 40),
                 "source": _clip(last_worked.get("source"), 20),
             }

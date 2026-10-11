@@ -308,7 +308,7 @@ normal).
 ## Last station worked — an ADIF record per QSO (added 2026-10-11)
 
 The page can show the last QSO the logger put on the air, under that
-station's radios: **date, time (UTC), callsign and mode**, with a
+station's radios: **date, time (UTC), callsign, band and mode**, with a
 `QRZero Logged` chip.
 
 Set it up in the agent's config.json (sibling of `"source"`, a
@@ -345,13 +345,23 @@ extra `last_worked` object. The server has no ADIF endpoint and no UDP
 port — the same rule the N1MM path follows — it only holds the last one
 reported and hands it to the page.
 
-**Only those four fields are sent.** An ADIF record carries everything the
-logger knows about a QSO: frequency, reports, grid, name, QTH, comment.
-None of it is read, and none of it leaves the shack LAN. That is also the
-privacy answer — there is nothing for `contest_mode` to mask here, because
-nothing else is sent. `adif_test.go` asserts it against a real
-QRZero-shaped record, so widening the payload means changing that test on
-purpose.
+**The frequency is masked to a band, always.** A logged QSO's exact
+frequency never leaves the shack LAN, whether or not `contest_mode` is on:
+the agent reads the record's `FREQ`, hands it to `band.go`'s `freqToBand`
+— the same function and the same ARRL-checked table contest mode uses —
+and reports only the band *name*. So a QSO reads `20M`, exactly like a
+masked radio row, and nothing finer exists in the API response or the
+browser. ADIF's own `BAND` field ("20m", lower case) is the fallback for a
+record with no `FREQ`; `freqToBand` is preferred so the label matches the
+rest of the page rather than whatever spelling the logger chose. A
+frequency in no amateur band reads `OOB`, band.go's sentinel, not a guess.
+
+**Nothing else is sent.** An ADIF record carries everything the logger
+knows about a QSO: reports, grid, name, QTH, comment. None of it is read,
+and none of it leaves the shack LAN. `adif_test.go` asserts both halves
+against a real QRZero-shaped record — the fields that must be there, and
+the frequency, reports, name and comment that must not — so widening the
+payload means changing that test on purpose.
 
 **Wire format**, taken from QRZero's own source (`crates/server/src/
 udp_out.rs`'s `Format::Adif` → `crates/core/src/adif.rs`'s `write_record`)
@@ -408,7 +418,11 @@ frequency is a claim about *right now* while a logged QSO is a dated fact.
     panicking. Band table is also asserted to be ascending and
     non-overlapping.
   - `adif_test.go` — the last-worked path: a real QRZero-shaped record
-    parses to the right call/mode/UTC timestamp; a value with spaces
+    parses to the right call/mode/band/UTC timestamp; the frequency mask
+    (14.0255 MHz → `20M` via band.go, ADIF's own `BAND` only as a
+    fallback, `OOB` for a frequency in no band, no band at all rather than
+    a guess when a record has neither, and the MHz→Hz rounding); a value
+    with spaces
     (`COMMENT`, `NAME`) survives because the declared length is honoured;
     `SUBMODE` beats `MODE` so FT4 isn't "MFSK"; `TIME_ON` as `HHMM`, a
     garbage `TIME_ON`, and a record with no time at all all behave; a
@@ -445,8 +459,9 @@ frequency is a claim about *right now* while a logged QSO is a dated fact.
     with `"last_worked": true`, a QRZero-shaped ADIF record sent to
     :14060 over a real socket → the agent → the real Python server →
     `/api/status` carrying
-    `"last_worked":{"call":"DL1ABC","mode":"CW","at":"2026-10-11T01:15:30Z","source":"qrzero"}`
-    and the page rendering `Last worked DL1ABC CW QRZero Logged
+    `"last_worked":{"call":"DL1ABC","mode":"CW","band":"20M","at":"2026-10-11T01:15:30Z","source":"qrzero"}`
+    — the record's own `<FREQ:7>14.0255` nowhere in the response — and the
+    page rendering `Last worked DL1ABC 20M CW QRZero Logged
     2026-10-11 01:15Z`. Not yet tested against QRZero itself — its
     **Send test** button is the first thing to try on your hardware.
   - DXLog mode: a real UDP packet sent to port 13063 (its documented

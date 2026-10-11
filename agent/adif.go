@@ -29,15 +29,29 @@ package main
 // where a value ends: a COMMENT or NAME can contain spaces, so splitting
 // on whitespace quietly truncates those fields.
 //
-// Only four of the record's fields are read, and only those four are
-// reported: QSO_DATE, TIME_ON, CALL and MODE (CJ, 2026-10-11). Everything
-// else a logger packs into an ADIF record -- frequency, reports, grid,
-// name, QTH, the lot -- is ignored here and never leaves the shack LAN,
-// which is also the privacy answer: there is nothing to mask because
-// nothing else is sent. Adding a field later means adding it in three
-// places (here, the report payload, the page), not loosening a filter.
+// Only a handful of the record's fields are read, and only those are
+// reported: QSO_DATE, TIME_ON, CALL, MODE and a BAND (CJ, 2026-10-11).
+// Everything else a logger packs into an ADIF record -- reports, grid,
+// name, QTH, comment, the lot -- is ignored here and never leaves the
+// shack LAN. Adding a field later means adding it in three places (here,
+// the report payload, the page), not loosening a filter.
+//
+// The band is contest_mode's frequency mask applied unconditionally (CJ,
+// 2026-10-11): the record's FREQ is read, handed to band.go's freqToBand
+// -- the same function and the same ARRL-checked table the radio rows use
+// -- and only the band NAME is reported. The exact frequency of a logged
+// QSO never leaves the shack LAN whether or not contest_mode is on, which
+// is stricter than the radio rows on purpose: "what I'm tuned to right
+// now" is the point of the page, while a worked station's exact frequency
+// adds nothing a band name doesn't.
 //
 // Things taken from the real format rather than assumed:
+//   - FREQ is MHz as a decimal string ("14.0255"), not Hz and not N1MM's
+//     tens of Hz. It is read only to derive the band and is never
+//     reported. ADIF's own BAND field ("20m", lower case) is the fallback
+//     when a record has no FREQ -- freqToBand is preferred so the label
+//     matches the rest of the page exactly ("20M", "70CM", "OOB"),
+//     rather than trusting whatever spelling a logger chose.
 //   - MODE for a digital QSO is ADIF's parent mode with the real one in
 //     SUBMODE (MFSK + FT4), so SUBMODE wins when it's there -- otherwise
 //     an FT4 QSO would show up as "MFSK".
@@ -92,6 +106,9 @@ const adifDefaultPort = 14060
 type lastWorked struct {
 	Call string  `json:"call"`
 	Mode *string `json:"mode"`
+	// Band is a band NAME ("20M"), never a frequency -- see the file
+	// header on borrowing contest_mode's mask for this.
+	Band *string `json:"band"`
 	// Source names the integration the QSO arrived through, so the page
 	// can chip it ("QRZero Logged"). It says which PORT it came in on,
 	// not which program sent it -- nothing in an ADIF record identifies
@@ -151,11 +168,15 @@ func (s *AdifSource) apply(packet []byte, receivedAt time.Time) {
 	s.mu.Lock()
 	s.last = newest
 	s.mu.Unlock()
-	mode := "?"
-	if newest.Mode != nil && *newest.Mode != "" {
-		mode = *newest.Mode
+	log.Printf("[adif :%d] last worked: %s %s %s at %s", s.Port, newest.Call,
+		orUnknown(newest.Band), orUnknown(newest.Mode), newest.At)
+}
+
+func orUnknown(p *string) string {
+	if p == nil || *p == "" {
+		return "?"
 	}
-	log.Printf("[adif :%d] last worked: %s %s at %s", s.Port, newest.Call, mode, newest.At)
+	return *p
 }
 
 // recordToLastWorked turns one parsed ADIF record into a report, or nil if
@@ -180,10 +201,38 @@ func recordToLastWorked(rec map[string]string, receivedAt time.Time) *lastWorked
 		lw.Mode = &mode
 	}
 
+	// The mask: read the frequency, report only the band it falls in.
+	// freqToBand is band.go's -- the same table contest_mode uses -- so a
+	// QSO's band reads identically to a masked radio row. ADIF's own BAND
+	// field is the fallback for a record with no FREQ.
+	band := ""
+	if hz, ok := parseAdifFreqHz(rec["FREQ"]); ok {
+		band = freqToBand(hz)
+	} else {
+		band = strings.ToUpper(strings.TrimSpace(rec["BAND"]))
+	}
+	if band != "" {
+		lw.Band = &band
+	}
+
 	if at, ok := parseAdifTime(rec["QSO_DATE"], rec["TIME_ON"]); ok {
 		lw.At = at.Format(time.RFC3339)
 	}
 	return lw
+}
+
+// parseAdifFreqHz reads ADIF's FREQ field (MHz as a decimal string) into
+// Hz, for freqToBand. Rounded, not truncated: 14.0255 MHz is 14,025,500 Hz
+// exactly, but binary floating point lands a hair under it and truncation
+// would make that 14,025,499 -- harmless for a band lookup, wrong-looking
+// in a log line, and the kind of thing that bites the day someone reuses
+// this for something finer.
+func parseAdifFreqHz(freq string) (int64, bool) {
+	mhz, err := strconv.ParseFloat(strings.TrimSpace(freq), 64)
+	if err != nil || mhz <= 0 {
+		return 0, false
+	}
+	return int64(mhz*1e6 + 0.5), true
 }
 
 // parseAdifTime combines ADIF's QSO_DATE (YYYYMMDD) and TIME_ON (HHMMSS,

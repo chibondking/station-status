@@ -182,6 +182,7 @@
             font-size: 0.95rem;
             letter-spacing: 0.5px;
         }
+        .last-worked .lw-band,
         .last-worked .lw-mode { color: var(--body-color); }
         .last-worked .lw-when { margin-left: auto; }
         @media (max-width: 560px) {
@@ -387,6 +388,16 @@ function lastWorkedEl(lw) {
   call.className = 'lw-call';
   call.textContent = lw.call;
   el.appendChild(call);
+
+  // Band, never a frequency: the agent masks a logged QSO's frequency the
+  // way contest_mode masks a radio's, so a band name is all that reaches
+  // the server (see agent/adif.go).
+  if (lw.band) {
+    const band = document.createElement('span');
+    band.className = 'lw-band';
+    band.textContent = lw.band;
+    el.appendChild(band);
+  }
 
   if (lw.mode) {
     const mode = document.createElement('span');
