@@ -20,6 +20,11 @@
             --border-color: #261a00;
             --highlight-bg: #211500;
             --status-online: #1a7f37;
+            /* Transmit. Red, not another shade of the page's amber: this is
+               the one state that has to be readable at a glance from across
+               the shack, and amber-on-amber isn't. */
+            --status-tx: #ff3b30;
+            --status-tx-glow: rgba(255, 59, 48, 0.35);
         }
 
         * {
@@ -158,6 +163,45 @@
             letter-spacing: 0.5px;
             text-transform: uppercase;
             color: var(--body-color-muted);
+        }
+
+        /* [TX] -- this radio is keyed right now. TCI only: it's the one
+           source that reports transmit state directly (trx:), so the chip
+           appearing is itself a statement that the reading is live off the
+           radio, not inferred from a logger broadcast. Sits beside the
+           radio's name because that's what you're looking at when you want
+           to know "can I key up?". */
+        .tx-chip {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0 0.35rem;
+            border: 1px solid var(--status-tx);
+            border-radius: 2px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            line-height: 1.5;
+            color: var(--status-tx);
+            background: rgba(255, 59, 48, 0.12);
+            text-shadow: 0 0 6px var(--status-tx-glow);
+            vertical-align: 0.05em;
+            white-space: nowrap;
+            animation: tx-pulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes tx-pulse {
+            50% {
+                border-color: var(--status-tx-glow);
+                box-shadow: 0 0 8px var(--status-tx-glow);
+            }
+        }
+
+        /* A pulsing element is exactly what a vestibular/motion-sensitivity
+           setting is asking us to stop doing. The chip's colour and border
+           already carry the whole message, so dropping the animation loses
+           nothing. */
+        @media (prefers-reduced-motion: reduce) {
+            .tx-chip { animation: none; }
         }
 
         /* "Last station worked" -- one line under a station's radios, fed
@@ -352,6 +396,23 @@ function sourceLabel(source) {
   return '';
 }
 
+const TX_TITLE = 'Transmitting right now (live from the radio over TCI)';
+
+// The [TX] chip's markup, or '' for every case that isn't "a TCI radio,
+// online, keyed right now".
+//
+// Gated on source === 'tci' as well as the flag. The server already sends
+// tx:false for the logger sources, so this is belt-and-braces -- but the
+// point of the chip is that it means something definite, and the only
+// source that can say "keyed" rather than "probably keyed" is the direct
+// radio link. A future source that can't really tell shouldn't be able to
+// light this up by sending a hopeful true.
+function txChip(radio) {
+  if (radio.status !== 'online' || radio.source !== 'tci' || !radio.tx) return '';
+  return `<span class="tx-chip" title="${TX_TITLE}" role="status"` +
+         ` aria-label="Transmitting">TX</span>`;
+}
+
 // The chip on a last-worked QSO. It names the route the QSO came in on --
 // the agent's ADIF-over-UDP port, which is QRZero's "QSO logged"
 // connection -- not a detection of which program sent it; an ADIF record
@@ -456,7 +517,7 @@ function render(data) {
       const tr = document.createElement('tr');
       tr.className = radio.status; // "online" | "offline"
       tr.innerHTML = `
-        <td data-label="Radio">${radio.label}</td>
+        <td data-label="Radio">${radio.label}${txChip(radio)}</td>
         <td data-label="Freq">${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
         <td data-label="Mode">${radio.status === 'online' ? (radio.mode || '\u2014') : '\u2014'}</td>
         <td data-label="Operator">${radio.status === 'online' ? (radio.operator || '\u2014') : '\u2014'}</td>

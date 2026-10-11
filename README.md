@@ -154,6 +154,10 @@ vfo:<receiver>,<vfo_index>,<frequency_hz>;   -- the operating frequency, in Hz
 modulation:<receiver>,<mode>;                -- mode, sent LOWERCASE
                                                  ("usb", "cw") on connect
                                                  and on every change
+trx:<receiver>,<true|false>[,<src>];         -- transmit on/off, per slice
+                                                 (NOT yet confirmed against
+                                                 a capture off your machine
+                                                 -- see "Is it transmitting?")
 ```
 
 `tci.go` normalizes mode to uppercase for consistent display, and handles
@@ -186,6 +190,66 @@ common defaults.
 
 Re-verify or capture more with `websocat ws://localhost:<your-tci-port>`
 (single binary, no install) if anything changes.
+
+## Is it transmitting? — the `[TX]` chip (added 2026-10-11)
+
+When a slice is keyed, a small red **`[TX]`** chip appears next to that
+radio's name on the status page, and disappears when it unkeys. That's the
+whole feature; it's the fastest thing on the page to read, which is the
+point — it answers "can I key up on that radio?" without parsing a table.
+
+**TCI only, by design.** TCI is a direct link to the radio and states
+transmit explicitly (`trx:`). N1MM's and DXLog's `<RadioInfo>` broadcast
+describes *where a radio is tuned*, not whether it's keyed — so those
+agents always report `tx: false` rather than inferring something. The
+frontend additionally gates the chip on `source === "tci"`, so a future
+source that can't really tell can't light it up by sending a hopeful
+`true`.
+
+**It is not masked by contest mode.** What contest mode protects is the
+exact frequency you're running on; "this radio is keyed right now" gives
+away nothing about where, and is the most useful thing on the page while
+it's true. If you ever want it hidden too, that's a one-line change in
+`tciRadiosSnapshot`.
+
+**Three ways it can't get stuck on.** TCI only tells you a transmission
+ended by sending `trx:<rx>,false`, so every path that loses the stream has
+to clear it explicitly:
+
+1. **The WebSocket drops** → `setConnected(false)` zeroes every receiver's
+   TX (`TestDisconnectClearsTransmitState`). Frequency is deliberately
+   *not* cleared — that's still the last place the radio was.
+2. **The agent dies, or the network goes** → the server gates `tx` on the
+   same staleness check as `freq_hz`, so it reads false the moment the
+   radio reads offline.
+3. **A `trx:` value we can't parse** → previous state is left alone rather
+   than defaulting to false. This is the one asymmetry on purpose: dropping
+   a chip mid-transmission misleads an operator, where briefly keeping one
+   doesn't.
+
+**Verifying the command name on your hardware.** Unlike `vfo:` and
+`modulation:`, `trx:` has *not* been seen in a capture off your machine —
+it's the TCI spec's name and what every other TCI implementation uses, but
+AetherSDR hasn't been confirmed to send it. Check with:
+
+```
+websocat ws://localhost:<your-tci-port> | grep -i -e trx -e tx_
+```
+
+then key each slice. If `trx:0,true;` shows up, it already works. If
+something *else* appears instead (e.g. `tx_enable:`), that command name
+goes in the `case "trx":` arm of `tci.go`'s `apply()` and nothing else
+changes.
+
+The failure mode if the name is wrong is benign and silent: an unknown TCI
+command is a no-op, so the chip simply never appears and the rest of the
+page behaves exactly as before. Nothing breaks, you just don't get the
+chip until the name is corrected.
+
+**Accessibility:** the chip carries `aria-label="Transmitting"` and
+`role="status"`, and its pulse is dropped under
+`prefers-reduced-motion: reduce` — the colour and border already carry the
+whole message.
 
 ## N1MM format — confirmed against official docs
 
@@ -472,6 +536,13 @@ just an exception handler -- otherwise the mount wins and `curl
     the feature, refusing a collision with `n1mm_port`/`dxlog_port`); and
     the payload is asserted to carry only date/time/call/mode — the test
     fails if `FREQ`, `BAND`, reports or a name ever leak into it.
+  - The `[TX]` chip's transmit tracking (`tci_test.go`): `trx:` is
+    tracked per receiver so keying slice 1 leaves slice 0 alone; the
+    optional "what keyed it" third field (`trx:0,true,mic`) doesn't change
+    the reading; an unparseable value leaves the previous state alone
+    rather than defaulting to false; and `TestDisconnectClearsTransmitState`
+    covers the stuck-chip guard — a dropped WebSocket clears TX while
+    deliberately leaving the last known frequency in place.
   - `contest_mode_test.go` — the privacy property, through the real
     snapshot code path for both TCI and N1MM/DXLog: with `contest_mode`
     on, a report's `FreqHz` is `nil` and `Band` is set; with it off or
@@ -525,13 +596,29 @@ just an exception handler -- otherwise the mount wins and `curl
     null` — unchanged from today. Confirmed the server's offline/staleness
     logic (which only looks at report timestamps and `connected`) doesn't
     choke on a null `freq_hz`.
+  - The `[TX]` chip, end to end with the **actual compiled binary**: a
+    fake TCI WebSocket server scripted to tune both slices, key slice 1,
+    unkey it, then key slice 0 → the agent → the real Python server →
+    `/api/status` polled throughout, showing `tx` flipping per slice
+    independently and never on the wrong one. Then the stuck-chip guard
+    for real: the TCI server was killed *while slice 0 was keyed*, and
+    `tx` read `false` (with the radio `offline`) rather than latching on.
+    The frontend's `txChip()` was exercised directly against its own
+    source for all six cases — it emits the chip only for an online TCI
+    radio that is keyed, and withholds it for a stale `tx: true` on an
+    offline radio, for `n1mm`/`dxlog` reporting `tx: true`, and for an
+    older agent build that sends no `tx` field at all.
 - Server flow on its own: valid report → Online; bad auth token → 401;
   reports stop arriving → Offline past the threshold; multiple stations
   independently; `connected: false` → immediate Offline.
 - Static frontend served correctly by the same process, and visually
   rendered in a headless browser against your real CSS/font/header.
 
-Not tested: an actual AetherSDR or N1MM instance, running the agent on a
+Not tested: **whether AetherSDR actually names the transmit command
+`trx:`** — it's the TCI spec's name and what other implementations use,
+but it's the one command here not seen in a capture off your hardware, and
+it's a one-line fix in `tci.go` if it's something else (see "Is it
+transmitting?"). Also not tested: an actual AetherSDR or N1MM instance, running the agent on a
 real Windows machine (only cross-compiled and confirmed as a valid
 Windows executable), running the ARM builds on actual ARM hardware / a
 Chromebook (cross-compiled and `file`-verified only), or the frontend in

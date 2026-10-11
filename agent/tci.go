@@ -10,6 +10,14 @@ package main
 //                                                    connect and on change;
 //                                                    normalized to uppercase
 //                                                    here for display.
+//   trx:<receiver>,<true|false>[,<src>];         -- transmit on/off for that
+//                                                    receiver/slice. The
+//                                                    optional third field is
+//                                                    what keyed it ("mic",
+//                                                    "vox", "tci"); ignored
+//                                                    here -- we only care
+//                                                    that it IS transmitting,
+//                                                    not what keyed it.
 //
 //   Also present in real traffic but intentionally ignored (not needed for
 //   this use case, and safe to ignore -- unknown commands are no-ops):
@@ -31,6 +39,15 @@ package main
 // "Panadapter 1/2" the way you expect in your SO2R config (check this in
 // AetherSDR's UI while tuning each), and the actual TCI port on your
 // machine (check the TCI panel -- don't trust config.example.json's 40001).
+//
+// Also unconfirmed against a real capture: that AetherSDR names the
+// transmit command "trx" specifically. "trx:" is the TCI spec's name for
+// it and the one every other TCI implementation uses, but unlike vfo: and
+// modulation: it has NOT been seen in a capture off your machine. The
+// failure mode if it's named something else is benign and silent -- an
+// unknown command is a no-op, so the [TX] chip simply never lights and
+// nothing else about the page changes. To check, watch the stream while
+// keying a slice (see README, "Is it transmitting?").
 
 import (
 	"log"
@@ -44,8 +61,14 @@ import (
 )
 
 type ReceiverState struct {
-	FreqHz     *int64
-	Mode       *string
+	FreqHz *int64
+	Mode   *string
+	// Tx is this receiver's live transmit state, straight off TCI's trx:
+	// command. A plain bool, not a *bool: "we have never been told" and
+	// "not transmitting" both mean the same thing to a reader of the page,
+	// and conflating them is what keeps a [TX] chip from appearing on a
+	// radio we simply haven't heard a trx: for yet.
+	Tx         bool
 	LastUpdate time.Time
 }
 
@@ -98,14 +121,14 @@ func (s *TCISource) IsConnected() bool {
 	return s.connected
 }
 
-func (s *TCISource) GetReceiver(index int) (freqHz *int64, mode *string) {
+func (s *TCISource) GetReceiver(index int) (freqHz *int64, mode *string, tx bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rx, ok := s.receivers[index]
 	if !ok {
-		return nil, nil
+		return nil, nil, false
 	}
-	return rx.FreqHz, rx.Mode
+	return rx.FreqHz, rx.Mode, rx.Tx
 }
 
 func (s *TCISource) getOrCreateReceiver(index int) *ReceiverState {
@@ -147,6 +170,26 @@ func (s *TCISource) apply(cmd string, args []string) {
 		mode := strings.ToUpper(strings.TrimSpace(args[1]))
 		rx := s.getOrCreateReceiver(receiver)
 		rx.Mode = &mode
+		rx.LastUpdate = time.Now()
+	case "trx":
+		if len(args) < 2 {
+			return
+		}
+		receiver, err1 := strconv.Atoi(strings.TrimSpace(args[0]))
+		// ParseBool rather than == "true": it accepts the "1"/"0" and
+		// "True"/"False" spellings too, and more importantly it tells us
+		// when the field is something we don't understand at all. On an
+		// unparseable value we leave the previous state alone instead of
+		// guessing -- treating garbage as "false" would drop a [TX] chip
+		// mid-transmission, which is the one direction that misleads.
+		txOn, err2 := strconv.ParseBool(strings.TrimSpace(args[1]))
+		if err1 != nil || err2 != nil {
+			return
+		}
+		// A third arg (what keyed it: "mic", "vox", "tci") may follow; it
+		// doesn't change whether the radio is transmitting, so ignore it.
+		rx := s.getOrCreateReceiver(receiver)
+		rx.Tx = txOn
 		rx.LastUpdate = time.Now()
 	}
 }
@@ -208,6 +251,18 @@ func (s *TCISource) Run() {
 func (s *TCISource) setConnected(v bool) {
 	s.mu.Lock()
 	s.connected = v
+	// Dropping the connection clears every receiver's transmit state. TCI
+	// only tells us TX ended by sending trx:<rx>,false, so a socket that
+	// dies mid-transmission would otherwise leave the last trx:true we saw
+	// as the newest thing we know -- and the page would show a radio stuck
+	// in [TX] forever. Frequency and mode are left as they are: a stale
+	// frequency is still the last place that radio was, and the server
+	// blanks it anyway once the radio reads offline.
+	if !v {
+		for _, rx := range s.receivers {
+			rx.Tx = false
+		}
+	}
 	s.mu.Unlock()
 }
 

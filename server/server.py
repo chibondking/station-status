@@ -69,6 +69,11 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 #           "mode": Optional[str],
 #           "operator": Optional[str],
 #           "connected": bool,   # was the agent's data source (TCI/N1MM) connected
+#           "tx": bool,          # transmitting right now. Only the TCI path
+#                                # can set this -- see agent/main.go; N1MM
+#                                # and DXLog always send false, because
+#                                # <RadioInfo> says where a radio is tuned,
+#                                # not whether it's keyed
 #           "source": str,       # "tci" | "n1mm" | etc, informational
 #       }
 #   }
@@ -143,6 +148,10 @@ async def report(request: Request, authorization: Optional[str] = Header(None)):
                 "mode": r.get("mode"),
                 "operator": r.get("operator"),
                 "connected": bool(r.get("connected", False)),
+                # bool() with a False default, so an older agent build that
+                # doesn't send "tx" at all reports as not transmitting
+                # rather than erroring or storing None.
+                "tx": bool(r.get("tx", False)),
                 "source": r.get("source", "unknown"),
                 "_last_report_at": now,
             }
@@ -171,6 +180,12 @@ def _build_stations_snapshot() -> List[Dict[str, Any]]:
                 "band": r.get("band") if is_online else None,
                 "mode": r["mode"] if is_online else None,
                 "operator": r["operator"] if is_online else None,
+                # Gated on is_online for the same reason freq_hz is: a
+                # transmit state is a claim about this instant, and the
+                # moment we stop hearing from an agent we no longer know
+                # it. Left latched, a station whose agent died while a
+                # radio was keyed would show [TX] indefinitely.
+                "tx": bool(r.get("tx", False)) if is_online else False,
                 "source": r["source"],
                 "status": "online" if is_online else "offline",
             })
