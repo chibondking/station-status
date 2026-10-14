@@ -515,7 +515,7 @@ function render(data) {
     for (const radio of station.radios) {
       if (radio.status === 'online' && radio.band) anyMasked = true;
       const tr = document.createElement('tr');
-      tr.className = radio.status; // "online" | "offline"
+      tr.className = radio.status; // "In Use" | "Available"
       tr.innerHTML = `
         <td data-label="Radio">${radio.label}${txChip(radio)}</td>
         <td data-label="Freq">${radio.status === 'online' ? fmtFreqCell(radio) : '\u2014'}</td>
