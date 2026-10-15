@@ -13,9 +13,14 @@ A near-real-time station status page (K1TTT-style) built from:
   Release; source is the `.go` files if you ever need to rebuild.
   One agent process runs in exactly one mode, chosen via `"source"` in
   its config.json or the `--source` flag: `tci`, `n1mm`, or `dxlog`.
-- **`server/static/index.html`** — the actual page, polls `/api/status`
-  every 3s and renders a table per station, styled to match wt2p.us, plus
-  (optionally) each station's last logged QSO — see *Last station worked*.
+- **`server/static/`** — the page itself, in three files (split out of a
+  single 589-line `index.html` on 2026-10-15): `index.html` is the
+  markup, `style.css` the look (dark amber + Fira Code, matching
+  wt2p.us), and `app.js` the behaviour — it polls `/api/status` every 3s
+  and renders a table per station, plus (optionally) each station's last
+  logged QSO — see *Last station worked*. **Every word the page shows a
+  visitor is declared at the top of `app.js`**, so changing one is a
+  one-line edit in a known place.
 
 Everything has been **run and tested** in a sandbox — including the
 actual compiled Go binaries talking to the actual Python server, and real
