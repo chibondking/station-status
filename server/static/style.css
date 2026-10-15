@@ -1,0 +1,329 @@
+/* station-status -- the page's styling, split out of index.html
+   2026-10-15 so the markup, the styling and the behaviour are three
+   files you can hold in your head instead of one 589-line page.
+   Nothing here changed in the split; it is the same CSS, de-indented.
+
+   Palette and font match the rest of the wt2p.us family (blog, ops
+   dashboard): dark amber on near-black, Fira Code. Keep them in step --
+   these values are duplicated by hand across those sites, there's no
+   shared stylesheet. */
+
+:root {
+    --body-bg: #0d0d0d;
+    --window-bg: #121212;
+    --sidebar-bg: #090909;
+    --accent-color: #ff9400;
+    --accent-hover: #ffaa33;
+    --accent-glow: rgba(255, 148, 0, 0.2);
+    --accent-dim: #804a00;
+    --body-color: #ffaa00;
+    --body-color-muted: #cc7a00;
+    --border-color: #261a00;
+    --highlight-bg: #211500;
+    --status-online: #1a7f37;
+    /* Transmit. Red, not another shade of the page's amber: this is
+       the one state that has to be readable at a glance from across
+       the shack, and amber-on-amber isn't. */
+    --status-tx: #ff3b30;
+    --status-tx-glow: rgba(255, 59, 48, 0.35);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--body-bg);
+    color: var(--body-color);
+    font-family: "Fira Code", monospace;
+    line-height: 1.6;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    min-width: 0;
+    max-width: 800px;
+    background-color: var(--window-bg);
+    border: 1px solid var(--accent-dim);
+    box-shadow: 0 0 20px var(--accent-glow);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+
+header {
+    background-color: var(--sidebar-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.callsign-title {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+}
+
+.callsign {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    text-shadow: 0 0 8px var(--accent-glow);
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    font-size: 0.85rem;
+    color: var(--body-color-muted);
+}
+
+.status {
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    border: 1px solid var(--accent-dim);
+    padding: 0.25rem 0.5rem;
+    border-radius: 2px;
+    background: var(--highlight-bg);
+}
+
+.content {
+    padding: 2rem 1.5rem;
+}
+
+.section {
+    margin-bottom: 2rem;
+}
+.section:last-child { margin-bottom: 0; }
+
+h2 {
+    font-size: 1.1rem;
+    color: var(--accent-color);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px dashed var(--border-color);
+    padding-bottom: 0.25rem;
+}
+
+.station-name {
+    color: var(--accent-color);
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 1rem 0 0.5rem;
+}
+.station-name:first-of-type { margin-top: 0; }
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+}
+th, td {
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+th {
+    background-color: var(--sidebar-bg);
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+td { color: var(--body-color); }
+tr.offline td { color: var(--body-color-muted); font-style: italic; }
+
+.status-pill {
+    font-size: 0.75rem;
+    border: 1px solid var(--accent-dim);
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    background: var(--highlight-bg);
+}
+.status-pill.online { color: var(--status-online); }
+.status-pill.offline { color: var(--body-color-muted); border-color: var(--border-color); }
+
+/* Where the reading comes from: "TCI" for a direct radio link,
+   "Logger" for an N1MM/DXLog feed off the shack LAN. */
+.source-tag {
+    margin-left: 0.4rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--body-color-muted);
+}
+
+/* [TX] -- this radio is keyed right now. TCI only: it's the one
+   source that reports transmit state directly (trx:), so the chip
+   appearing is itself a statement that the reading is live off the
+   radio, not inferred from a logger broadcast. Sits beside the
+   radio's name because that's what you're looking at when you want
+   to know "can I key up?". */
+.tx-chip {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0 0.35rem;
+    border: 1px solid var(--status-tx);
+    border-radius: 2px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1.5;
+    color: var(--status-tx);
+    background: rgba(255, 59, 48, 0.12);
+    text-shadow: 0 0 6px var(--status-tx-glow);
+    vertical-align: 0.05em;
+    white-space: nowrap;
+    animation: tx-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tx-pulse {
+    50% {
+        border-color: var(--status-tx-glow);
+        box-shadow: 0 0 8px var(--status-tx-glow);
+    }
+}
+
+/* A pulsing element is exactly what a vestibular/motion-sensitivity
+   setting is asking us to stop doing. The chip's colour and border
+   already carry the whole message, so dropping the animation loses
+   nothing. */
+@media (prefers-reduced-motion: reduce) {
+    .tx-chip { animation: none; }
+}
+
+/* "Last station worked" -- one line under a station's radios, fed
+   by an ADIF record per QSO from the logger (QRZero). Sits below
+   the table, quieter than the radio rows: it's context, not the
+   live state the page exists for. */
+.last-worked {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0;
+    padding: 0.4rem 0.6rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 3px;
+    font-size: 0.8rem;
+    color: var(--body-color-muted);
+}
+.last-worked .lw-call {
+    color: var(--accent-color);
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+}
+.last-worked .lw-band,
+.last-worked .lw-mode { color: var(--body-color); }
+.last-worked .lw-when { margin-left: auto; }
+@media (max-width: 560px) {
+    .last-worked .lw-when { margin-left: 0; }
+}
+
+.updated {
+    color: var(--body-color-muted);
+    font-size: 0.78rem;
+    margin-top: 1rem;
+}
+
+.empty-state {
+    color: var(--body-color-muted);
+    font-size: 0.9rem;
+}
+
+/* Contest mode: the agent published only the band, not the exact
+   frequency. Muted text + a padlock so it reads as "withheld on
+   purpose", not "missing" or "offline". */
+.band-masked {
+    color: var(--body-color-muted);
+    white-space: nowrap;
+}
+.lock-icon {
+    vertical-align: -0.15em;
+}
+
+.legend {
+    color: var(--body-color-muted);
+    font-size: 0.78rem;
+    margin-top: 0.75rem;
+}
+.legend .lock-icon {
+    margin-right: 0.15rem;
+}
+
+.repo-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    background-color: var(--sidebar-bg);
+    border-top: 1px solid var(--border-color);
+    padding: 0.9rem 1.5rem;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--body-color-muted);
+}
+.repo-footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+.repo-footer a:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
+/* --- Mobile: below ~560px the 5-column table won't fit, so each
+   radio row becomes a stacked label/value card. --- */
+@media (max-width: 560px) {
+    body { padding: 1rem 0.5rem; }
+    header { padding: 1rem; }
+    .callsign { font-size: 1.6rem; }
+    .content { padding: 1.25rem 1rem; }
+    .repo-footer { padding: 0.9rem 1rem; }
+
+    /* Let the subtitle drop under the callsign instead of being
+       clipped on the same line. */
+    .subtitle { flex-basis: 100%; }
+
+    table, tbody, tr, td { display: block; }
+    thead { display: none; }
+    table { width: 100%; }
+
+    tr {
+        border: 1px solid var(--border-color);
+        margin-bottom: 0.75rem;
+    }
+    tr:last-child { margin-bottom: 0; }
+
+    td {
+        border: none;
+        border-bottom: 1px dashed var(--border-color);
+        padding: 0.5rem 0.75rem;
+        overflow-wrap: anywhere;
+    }
+    td:last-child { border-bottom: none; }
+    td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 0.1rem;
+        color: var(--accent-color);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+}
