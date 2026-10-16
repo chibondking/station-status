@@ -78,12 +78,12 @@ test('the pill keeps the API\'s own value as its class, which is what the colour
   assert.deepEqual([...doc.querySelectorAll('tbody tr')].map((tr) => tr.className), ['online', 'offline']);
 });
 
-test('available is the green one and in use wears the amber', () => {
+test('available is green and in use is red', () => {
   // Read from the stylesheet, because the swap is only half-done if the
   // rule still points at the colour that used to mean "link is up".
   const css = fs.readFileSync(path.join(STATIC, 'style.css'), 'utf8');
   assert.match(css, /--status-available:\s*#1a7f37/);
-  assert.match(css, /--status-in-use:\s*#ff9400/);
+  assert.match(css, /--status-in-use:\s*#ff3b3b/);
   assert.match(css, /\.status-pill\.offline\s*{\s*color:\s*var\(--status-available\)/);
   assert.match(css, /\.status-pill\.online\s*{\s*color:\s*var\(--status-in-use\)/);
 });
