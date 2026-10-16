@@ -1,0 +1,11 @@
+{
+  "name": "station-status-web",
+  "private": true,
+  "description": "Dev-only tooling for the station-status page: jsdom, so the frontend's tests can render it the way a browser does. The server (Python) and the agent (Go) have no Node dependency -- nothing here ships or is installed on the VPS.",
+  "scripts": {
+    "test": "node --test 'server/webtest/*.test.js'"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
+}

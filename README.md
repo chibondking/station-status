@@ -13,6 +13,12 @@ A near-real-time station status page (K1TTT-style) built from:
   Release; source is the `.go` files if you ever need to rebuild.
   One agent process runs in exactly one mode, chosen via `"source"` in
   its config.json or the `--source` flag: `tci`, `n1mm`, or `dxlog`.
+- **`server/webtest/`** — tests for that page: jsdom loads it through
+  its own `<script src>` tag and checks what a visitor ends up seeing
+  (the status labels, the blanked cells, the TX chip's rules, the
+  contest padlock, shack-LAN data rendering as text). `npm test` from
+  the repo root; `npm ci` first. jsdom is the only Node dependency and
+  it's dev-only — nothing Node ships to the VPS.
 - **`server/static/`** — the page itself, in three files (split out of a
   single 589-line `index.html` on 2026-10-15): `index.html` is the
   markup, `style.css` the look (dark amber + Fira Code, matching

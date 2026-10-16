@@ -1,0 +1,37 @@
+name: web-test
+
+# The station page's own tests (server/webtest/) -- they load
+# server/static/index.html in jsdom through its real <script src> tag
+# and assert what a visitor ends up seeing.
+#
+# They exist because PR #11 set out to change the status labels, changed
+# a code comment instead, and nothing anywhere caught that the page was
+# unchanged.
+#
+# GitHub-hosted rather than the self-hosted runner the agent build uses:
+# this needs an npm install, and there's no reason to spend the VPS's
+# memory on one when the job touches nothing of the VPS's.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: web-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test

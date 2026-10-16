@@ -31,3 +31,6 @@ agent/*.test
 agent/stationagent
 agent/stationagent-*
 dist/
+
+# Dev-only: jsdom for the frontend tests (see package.json).
+node_modules/
