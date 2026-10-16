@@ -22,13 +22,19 @@
     --highlight-bg: #211500;
     /* Status colours are named for what they mean, not for the wire
        value that selects them: a radio nobody is on is the welcoming
-       state on a shared station, so AVAILABLE is the green one and IN
-       USE wears the site's amber (CJ, 2026-10-15 -- these were the
-       other way round when the pills still read ONLINE/OFFLINE). The
-       .online/.offline class names below still come straight from the
-       API, so read them as "in use"/"available". */
+       state on a shared station, so AVAILABLE is green and IN USE is
+       red (CJ, 2026-10-15 -- they were the other way round when the
+       pills still read ONLINE/OFFLINE, and in use was briefly amber).
+       Red here means "occupied, don't take this one", not "broken".
+       The .online/.offline class names below still come straight from
+       the API, so read them as "in use"/"available".
+
+       #ff3b3b is the wt2p family's bright alert red (the ops
+       dashboard's --wall-critical), not its dim --status-offline
+       (#7f1a1a): these pills are coloured TEXT, and the dim red is too
+       low-contrast to read on this background. */
     --status-available: #1a7f37;
-    --status-in-use: #ff9400;
+    --status-in-use: #ff3b3b;
     /* Transmit. Red, not another shade of the page's amber: this is
        the one state that has to be readable at a glance from across
        the shack, and amber-on-amber isn't. */
