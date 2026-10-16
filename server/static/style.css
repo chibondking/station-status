@@ -20,7 +20,15 @@
     --body-color-muted: #cc7a00;
     --border-color: #261a00;
     --highlight-bg: #211500;
-    --status-online: #1a7f37;
+    /* Status colours are named for what they mean, not for the wire
+       value that selects them: a radio nobody is on is the welcoming
+       state on a shared station, so AVAILABLE is the green one and IN
+       USE wears the site's amber (CJ, 2026-10-15 -- these were the
+       other way round when the pills still read ONLINE/OFFLINE). The
+       .online/.offline class names below still come straight from the
+       API, so read them as "in use"/"available". */
+    --status-available: #1a7f37;
+    --status-in-use: #ff9400;
     /* Transmit. Red, not another shade of the page's amber: this is
        the one state that has to be readable at a glance from across
        the shack, and amber-on-amber isn't. */
@@ -144,7 +152,10 @@ th {
     font-size: 0.8rem;
 }
 td { color: var(--body-color); }
-tr.offline td { color: var(--body-color-muted); font-style: italic; }
+/* An available radio's cells are em dashes -- muted, because there's
+   nothing to read, but no longer italic: that read as "degraded" back
+   when the row meant "offline". */
+tr.offline td { color: var(--body-color-muted); }
 
 .status-pill {
     font-size: 0.75rem;
@@ -153,8 +164,8 @@ tr.offline td { color: var(--body-color-muted); font-style: italic; }
     border-radius: 2px;
     background: var(--highlight-bg);
 }
-.status-pill.online { color: var(--status-online); }
-.status-pill.offline { color: var(--body-color-muted); border-color: var(--border-color); }
+.status-pill.online { color: var(--status-in-use); }           /* IN USE */
+.status-pill.offline { color: var(--status-available); }       /* AVAILABLE */
 
 /* Where the reading comes from: "TCI" for a direct radio link,
    "Logger" for an N1MM/DXLog feed off the shack LAN. */
@@ -327,3 +338,44 @@ tr.offline td { color: var(--body-color-muted); font-style: italic; }
         font-weight: 600;
     }
 }
+
+/* ---------------------------------------------------------------------
+   404 page (404.html). Everything above is shared with index.html --
+   the palette, the container, the header and the footer -- which is the
+   point of 404.html linking this file instead of carrying its own copy
+   of all of it (it did until 2026-10-15; the two drifted apart by hand).
+   --------------------------------------------------------------------- */
+
+.code {
+    font-size: clamp(2.5rem, 12vw, 4rem);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--accent-color);
+    text-shadow: 0 0 12px var(--accent-glow);
+    letter-spacing: 3px;
+}
+
+.lede { margin: 0.25rem 0 1.25rem; color: var(--body-color); }
+
+.hint { color: var(--body-color-muted); font-size: 0.85rem; }
+
+.links { list-style: none; margin: 1.25rem 0 0; }
+
+.links li {
+    background-color: var(--sidebar-bg);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 3px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.6rem;
+}
+
+.links a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.links a:hover { color: var(--accent-hover); }
+
+.links small { display: block; color: var(--body-color-muted); font-weight: 400; }
