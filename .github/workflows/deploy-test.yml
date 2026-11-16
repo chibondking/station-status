@@ -1,0 +1,27 @@
+name: deploy-test
+
+# deploy/autodeploy.sh's decisions -- deploy only a commit whose checks
+# passed, roll back one that doesn't come up, refuse local edits and
+# non-fast-forwards -- against a scratch git origin and fakes. bash, git
+# and python3 only; nothing installed. Its own result is one of the
+# checks autodeploy waits for, so a change that breaks it never deploys.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  autodeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash deploy/test/autodeploy-test.sh
+      - run: shellcheck -S error deploy/autodeploy.sh deploy/test/autodeploy-test.sh

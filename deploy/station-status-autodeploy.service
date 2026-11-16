@@ -1,0 +1,16 @@
+# Install to /etc/systemd/system/ with its .timer (deploy/DEPLOY.md §10).
+# Runs the ROOT-OWNED copy at /usr/local/sbin, never the script in the
+# checkout: the checkout follows main, and what root runs should be only
+# what was installed by hand.
+[Unit]
+Description=station-status: deploy origin/main when its checks pass
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/station-status-autodeploy
+StateDirectory=station-status-autodeploy
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/station-status
