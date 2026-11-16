@@ -21,7 +21,7 @@ A near-real-time station status page (K1TTT-style) built from:
   it's dev-only — nothing Node ships to the VPS.
 - **`server/static/`** — the page itself, in three files (split out of a
   single 589-line `index.html` on 2026-10-15): `index.html` is the
-  markup, `style.css` the look (dark amber + Fira Code, matching
+  markup, `style.css` the look (dark amber + IBM Plex Sans/Mono, matching
   wt2p.us), and `app.js` the behaviour — it polls `/api/status` every 3s
   and renders a table per station, plus (optionally) each station's last
   logged QSO — see *Last station worked*. **Every word the page shows a
