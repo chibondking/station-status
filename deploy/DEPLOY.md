@@ -102,6 +102,9 @@ ever catch.
 
 ## 9. Updating an existing install
 
+Normally automatic now -- see §10. These are the steps it runs, and what
+to do by hand when it refuses (local edits, a rewritten `main`).
+
 The box has a plain git checkout at `/opt/station-status`, owned by the
 `stationstatus` service user, and the service runs `server.py` straight
 out of it. So an update is a fast-forward and a restart:
@@ -140,6 +143,45 @@ server on different versions keep working -- `/api/report` is additive --
 but the status page footer shows the server's version and
 `stationagent -version` shows the agent's, so you can tell them apart
 when something looks off.
+
+## 10. Automatic deploys
+
+Since 2026-11-16 the box deploys itself: every 2 minutes a timer checks
+`origin/main`, and when it has moved, `deploy/autodeploy.sh` waits until
+every GitHub check on that commit has finished, deploys it only if they
+all passed (the §9 steps: fast-forward, restart), and confirms
+`/api/version` reports the new commit -- rolling back if it doesn't. So
+**merging a PR is the deploy**; expect it live a few minutes after the
+checks go green.
+
+It is pull, not push: nothing on GitHub can reach the box, and there is no
+deploy key or secret. It never deploys a checkout with local edits or a
+`main` that isn't a fast-forward; those, a rollback, or an unreachable
+GitHub API make the run fail, and the ops dashboard alerts when the "last
+good run" file (`/var/lib/station-status-autodeploy/last-ok`) is over 15
+minutes old. A commit whose CI failed is simply not deployed (GitHub
+already tells you CI failed); the box stays on the last good one.
+
+Watch it: `journalctl -u station-status-autodeploy -f`. Pause it:
+`sudo systemctl stop station-status-autodeploy.timer`.
+
+**One-time install** (and again whenever `deploy/autodeploy.sh` or the
+two units change -- root runs only this installed copy, never the one in
+the checkout, which follows `main`):
+
+```bash
+cd /opt/station-status
+sudo install -o root -g root -m 755 deploy/autodeploy.sh /usr/local/sbin/station-status-autodeploy
+sudo install -o root -g root -m 644 deploy/station-status-autodeploy.service deploy/station-status-autodeploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now station-status-autodeploy.timer
+sudo systemctl start station-status-autodeploy.service   # one run now
+journalctl -u station-status-autodeploy -n 5 --no-pager
+```
+
+The VPS's own port is whatever `STATUS_PORT` in `status.env` says; the
+script checks `http://127.0.0.1:8003/api/version` (wt2p-vpserver-chi's).
+On a box with another port, edit `VERSION_URL` in the installed copy.
 
 ## Note on firewalls
 
